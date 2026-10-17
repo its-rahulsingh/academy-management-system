@@ -1,0 +1,12 @@
+# Optional: Render Dashboard -> New -> Blueprint -> select this repository.
+# You can alternatively configure the same service manually in New -> Web Service.
+services:
+  - type: web
+    name: academy-starter
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production

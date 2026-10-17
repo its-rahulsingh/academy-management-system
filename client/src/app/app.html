@@ -1,0 +1,102 @@
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">A</div>
+      <div><strong>Academy</strong><span>ERP STARTER</span></div>
+    </div>
+    <div class="nav-label">WORKSPACE</div>
+    <nav aria-label="Primary navigation">
+      <a class="nav-link active" href="/" aria-current="page"><span class="nav-icon">▦</span> Overview</a>
+      <span class="nav-link muted"><span class="nav-icon">♧</span> Students <small>Soon</small></span>
+      <span class="nav-link muted"><span class="nav-icon">▤</span> Batches <small>Soon</small></span>
+      <span class="nav-link muted"><span class="nav-icon">✓</span> Enrollments <small>Soon</small></span>
+    </nav>
+    <div class="sidebar-bottom"><span class="environment-dot"></span> Starter environment <small>v0.1</small></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <div class="breadcrumb">Workspace <span>/</span> Overview</div>
+      <div class="avatar" aria-label="Academy demo user">AC</div>
+    </header>
+
+    <div class="page">
+      <div class="eyebrow"><span class="eyebrow-line"></span> ACADEMY MANAGEMENT SYSTEM</div>
+      <section class="hero">
+        <div>
+          <h1>Your academy, <em>one source of truth.</em></h1>
+          <p>Welcome to your .NET 10 + Angular starter. Everything begins here: simple, structured, and ready to grow.</p>
+          <div class="hero-actions">
+            <button type="button" class="btn-primary" (click)="checkConnection()" [disabled]="state() === 'loading'">
+              {{ state() === 'loading' ? 'Checking connection…' : 'Test backend connection' }}
+              <span aria-hidden="true">↗</span>
+            </button>
+            <span class="hero-note">Your first deployment checkpoint</span>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="visual-orbit one"></div><div class="visual-orbit two"></div>
+          <div class="visual-center">A<span>·</span></div>
+          <div class="visual-pill top">Students</div>
+          <div class="visual-pill bottom">Batches</div>
+        </div>
+      </section>
+
+      <div class="section-heading">
+        <div><h2>System overview</h2><p>Live connection information from your ASP.NET Core API</p></div>
+        <span class="phase-badge">PHASE 0 · STARTER</span>
+      </div>
+
+      <div class="status-grid">
+        <article class="card connection-card">
+          <div class="card-heading"><span class="card-icon">⌁</span> API connection</div>
+          <div class="connection-status" [class.ok]="state() === 'connected'" [class.bad]="state() === 'offline'">
+            <span class="status-dot"></span>
+            @switch (state()) {
+              @case ('connected') { Connected }
+              @case ('offline') { Unavailable }
+              @default { Checking… }
+            }
+          </div>
+          <p>Angular → ASP.NET Core 10</p>
+          <span class="card-footer">Checked: {{ checkedAt() }}</span>
+        </article>
+
+        <article class="card">
+          <div class="card-heading"><span class="card-icon">◇</span> Backend</div>
+          <div class="metric">.NET <span>10</span></div>
+          <p>ASP.NET Core minimal API</p>
+          <span class="card-footer">Runs with the Angular frontend on Render</span>
+        </article>
+
+        <article class="card">
+          <div class="card-heading"><span class="card-icon">◎</span> Hosting</div>
+          <div class="metric">One <span>service</span></div>
+          <p>Docker deployment on Render</p>
+          <span class="card-footer">Neon PostgreSQL will be added later</span>
+        </article>
+      </div>
+
+      <section class="details-grid">
+        <article class="panel">
+          <div class="panel-title"><h2>API response</h2><span class="live-label">LIVE TEST</span></div>
+          @if (welcome(); as response) {
+            <div class="response-label">GET /api/welcome <span>200 OK</span></div>
+            <p class="response-text">{{ response.message }}</p>
+            <div class="response-meta">Application: <strong>{{ response.application }}</strong></div>
+          } @else {
+            <div class="response-label">GET /api/welcome</div>
+            <p class="response-text">{{ error() || 'Waiting for the API response…' }}</p>
+          }
+        </article>
+        <article class="panel">
+          <div class="panel-title"><h2>What's next</h2><span class="next-label">ROADMAP</span></div>
+          <div class="roadmap-step"><span>01</span><div><strong>Connect Neon PostgreSQL</strong><p>Add real persistent academy data</p></div></div>
+          <div class="roadmap-step"><span>02</span><div><strong>Student management</strong><p>Create and manage student profiles</p></div></div>
+          <div class="roadmap-step"><span>03</span><div><strong>Batches and enrollments</strong><p>Put the core ERP workflow online</p></div></div>
+        </article>
+      </section>
+      <footer>Academy ERP Starter <span>•</span> Built with Angular and ASP.NET Core 10</footer>
+    </div>
+  </main>
+</div>
