@@ -1,5 +1,4 @@
-# Optional: Render Dashboard -> New -> Blueprint -> select this repository.
-# You can alternatively configure the same service manually in New -> Web Service.
+# Existing Web Service users: configure this in the Render dashboard, no need to recreate the service.
 services:
   - type: web
     name: academy-starter
@@ -10,3 +9,5 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: ConnectionStrings__AcademyDb
+        sync: false # Paste the Neon pooled ADO.NET connection string securely in Render.
