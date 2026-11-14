@@ -1,0 +1,20 @@
+# .NET
+**/bin/
+**/obj/
+.vs/
+*.user
+# Angular / Node
+**/node_modules/
+**/dist/
+**/.angular/
+# IDE / Secrets
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local tooling and build output copied into the API for local runs
+.claude/
+server/Academy.Api/wwwroot/

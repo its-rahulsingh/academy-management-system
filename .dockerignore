@@ -1,0 +1,13 @@
+.git
+.gitignore
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+**/.vscode
+**/.vs
+**/*.user
+**/.env
+**/.env.*
+*.zip

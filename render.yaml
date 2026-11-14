@@ -1,0 +1,19 @@
+# Existing Web Service users: configure this in the Render dashboard, no need to recreate the service.
+services:
+  - type: web
+    name: academy-starter
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__AcademyDb
+        sync: false # Paste the Neon pooled ADO.NET connection string securely in Render.
+      - key: OWNER_EMAIL
+        sync: false # Platform owner login, created once at first start.
+      - key: OWNER_PASSWORD
+        sync: false # 12+ characters. Remove after the owner has signed in.
+      - key: App__PublicBaseUrl
+        sync: false # e.g. https://your-app.onrender.com — used in emailed links.

@@ -1,0 +1,169 @@
+using Academy.Api.Domain;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Academy.Api.Data.Configurations;
+
+// Every index on an academy table leads with tenant_id: all queries are scoped to one academy,
+// so this keeps each academy's rows together and lookups fast however many academies share the table.
+
+internal static class LedgerColumns
+{
+    public static void HasLedgerColumns<T>(this EntityTypeBuilder<T> e) where T : LedgerEntry
+    {
+        e.Property(x => x.Status).IsEnumText();
+        e.Property(x => x.VoidReason).HasMaxLength(500);
+    }
+}
+
+internal sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
+{
+    public void Configure(EntityTypeBuilder<Course> e)
+    {
+        e.ToTable("courses");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        e.Property(x => x.Name).HasMaxLength(Columns.Name);
+        e.Property(x => x.Fee).IsMoney();
+    }
+}
+
+internal sealed class StudentConfiguration : IEntityTypeConfiguration<Student>
+{
+    public void Configure(EntityTypeBuilder<Student> e)
+    {
+        e.ToTable("students");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.CourseId });
+        e.HasIndex(x => new { x.TenantId, x.FullName });
+        e.HasIndex(x => new { x.TenantId, x.CreatedAtUtc });
+        e.Property(x => x.FullName).HasMaxLength(Columns.Name);
+        e.Property(x => x.Email).HasMaxLength(Columns.Email);
+        e.Property(x => x.Phone).HasMaxLength(Columns.Phone);
+        e.Property(x => x.Remarks).HasMaxLength(Columns.Notes);
+        e.Property(x => x.FeeAmount).IsMoney();
+        e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class FacultyConfiguration : IEntityTypeConfiguration<Faculty>
+{
+    public void Configure(EntityTypeBuilder<Faculty> e)
+    {
+        e.ToTable("faculty");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.FullName });
+        e.Property(x => x.FullName).HasMaxLength(Columns.Name);
+        e.Property(x => x.Email).HasMaxLength(Columns.Email);
+        e.Property(x => x.Phone).HasMaxLength(Columns.Phone);
+        e.Property(x => x.Specialization).HasMaxLength(Columns.Name);
+        e.Property(x => x.AgreedPayout).IsMoney();
+    }
+}
+
+internal sealed class StudentPaymentConfiguration : IEntityTypeConfiguration<StudentPayment>
+{
+    public void Configure(EntityTypeBuilder<StudentPayment> e)
+    {
+        e.ToTable("student_payments");
+        e.HasCreatedAt();
+        e.HasLedgerColumns();
+        e.HasIndex(x => new { x.TenantId, x.StudentId });
+        e.HasIndex(x => new { x.TenantId, x.PaidOn });
+        e.HasIndex(x => new { x.TenantId, x.ReceiptNumber }).IsUnique();
+        e.Property(x => x.Kind).IsEnumText();
+        e.Property(x => x.Amount).IsMoney();
+        e.Property(x => x.Method).HasMaxLength(Columns.Method);
+        e.Property(x => x.Notes).HasMaxLength(Columns.Notes);
+        e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class FeeAdjustmentConfiguration : IEntityTypeConfiguration<FeeAdjustment>
+{
+    public void Configure(EntityTypeBuilder<FeeAdjustment> e)
+    {
+        e.ToTable("fee_adjustments");
+        e.HasCreatedAt();
+        e.HasLedgerColumns();
+        e.HasIndex(x => new { x.TenantId, x.StudentId });
+        e.Property(x => x.Kind).IsEnumText();
+        e.Property(x => x.Amount).IsMoney();
+        e.Property(x => x.Reason).HasMaxLength(500);
+        e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class FacultyPayoutConfiguration : IEntityTypeConfiguration<FacultyPayout>
+{
+    public void Configure(EntityTypeBuilder<FacultyPayout> e)
+    {
+        e.ToTable("faculty_payouts");
+        e.HasCreatedAt();
+        e.HasLedgerColumns();
+        e.HasIndex(x => new { x.TenantId, x.FacultyId });
+        e.HasIndex(x => new { x.TenantId, x.PaidOn });
+        e.Property(x => x.Amount).IsMoney();
+        e.Property(x => x.Method).HasMaxLength(Columns.Method);
+        e.Property(x => x.Notes).HasMaxLength(Columns.Notes);
+        e.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
+{
+    public void Configure(EntityTypeBuilder<Expense> e)
+    {
+        e.ToTable("expenses");
+        e.HasCreatedAt();
+        e.HasLedgerColumns();
+        e.HasIndex(x => new { x.TenantId, x.SpentOn });
+        e.HasIndex(x => new { x.TenantId, x.Category });
+        e.Property(x => x.Title).HasMaxLength(180);
+        e.Property(x => x.Amount).IsMoney();
+        e.Property(x => x.Category).HasMaxLength(60);
+        e.Property(x => x.Method).HasMaxLength(Columns.Method);
+        e.Property(x => x.Notes).HasMaxLength(Columns.Notes);
+    }
+}
+
+internal sealed class AcademyTestConfiguration : IEntityTypeConfiguration<AcademyTest>
+{
+    public void Configure(EntityTypeBuilder<AcademyTest> e)
+    {
+        e.ToTable("academy_tests");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.TestDate });
+        e.HasIndex(x => new { x.TenantId, x.CourseId });
+        e.Property(x => x.Title).HasMaxLength(180);
+        e.Property(x => x.Subject).HasMaxLength(100);
+        e.Property(x => x.MaxMarks).HasPrecision(10, 2);
+        e.Property(x => x.Notes).HasMaxLength(Columns.Notes);
+        e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class TestResultConfiguration : IEntityTypeConfiguration<TestResult>
+{
+    public void Configure(EntityTypeBuilder<TestResult> e)
+    {
+        e.ToTable("test_results");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TestId, x.StudentId }).IsUnique();
+        e.HasIndex(x => new { x.TenantId, x.StudentId });
+        e.Property(x => x.Marks).HasPrecision(10, 2);
+        e.Property(x => x.Remarks).HasMaxLength(600);
+        e.HasOne(x => x.Test).WithMany().HasForeignKey(x => x.TestId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class TenantCounterConfiguration : IEntityTypeConfiguration<TenantCounter>
+{
+    public void Configure(EntityTypeBuilder<TenantCounter> e)
+    {
+        e.ToTable("tenant_counters");
+        e.HasKey(x => new { x.TenantId, x.Name });
+        e.Property(x => x.Name).HasMaxLength(40);
+    }
+}
