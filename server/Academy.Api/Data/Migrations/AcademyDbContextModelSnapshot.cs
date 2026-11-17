@@ -24,6 +24,58 @@ namespace Academy.Api.Data.Migrations
 
             modelBuilder.HasSequence("subscription_invoice_number_seq");
 
+            modelBuilder.Entity("Academy.Api.Domain.AcademicYear", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_academic_years");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_academic_years_tenant_id_name");
+
+                    b.HasIndex("TenantId", "StartDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_academic_years_tenant_id_start_date");
+
+                    b.ToTable("academic_years", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_academic_years_dates", "end_date > start_date");
+                        });
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AcademyTest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -809,6 +861,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("AcademicYearId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("academic_year_id");
+
                     b.Property<bool>("Active")
                         .HasColumnType("boolean")
                         .HasColumnName("active");
@@ -867,17 +923,20 @@ namespace Academy.Api.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_students");
 
+                    b.HasIndex("AcademicYearId")
+                        .HasDatabaseName("ix_students_academic_year_id");
+
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_students_course_id");
 
                     b.HasIndex("TenantId", "CourseId")
                         .HasDatabaseName("ix_students_tenant_id_course_id");
 
-                    b.HasIndex("TenantId", "CreatedAtUtc")
-                        .HasDatabaseName("ix_students_tenant_id_created_at_utc");
-
                     b.HasIndex("TenantId", "FullName")
                         .HasDatabaseName("ix_students_tenant_id_full_name");
+
+                    b.HasIndex("TenantId", "AcademicYearId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_students_tenant_id_academic_year_id_created_at_utc");
 
                     b.ToTable("students", (string)null);
                 });
@@ -1306,6 +1365,16 @@ namespace Academy.Api.Data.Migrations
                     b.ToTable("test_results", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.AcademicYear", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_academic_years_tenants_tenant_id");
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AcademyTest", b =>
                 {
                     b.HasOne("Academy.Api.Domain.Course", "Course")
@@ -1416,6 +1485,13 @@ namespace Academy.Api.Data.Migrations
 
             modelBuilder.Entity("Academy.Api.Domain.Student", b =>
                 {
+                    b.HasOne("Academy.Api.Domain.AcademicYear", "AcademicYear")
+                        .WithMany()
+                        .HasForeignKey("AcademicYearId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_students_academic_years_academic_year_id");
+
                     b.HasOne("Academy.Api.Domain.Course", "Course")
                         .WithMany()
                         .HasForeignKey("CourseId")
@@ -1429,6 +1505,8 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_students_tenants_tenant_id");
+
+                    b.Navigation("AcademicYear");
 
                     b.Navigation("Course");
                 });

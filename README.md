@@ -28,6 +28,21 @@ email fee reminders · user management · activity log.
 
 Money entries are never edited or deleted. A mistake is **voided** with a reason and re-entered, so totals always reconcile.
 
+## Academic years
+
+Each academy has its own year master (Super Admin → **Academic years**). A new academy starts with an April–March year;
+the Super Admin can change the dates of the current or a future year and add the next one. Once a year's last day has
+passed it is locked. A switch at the top of every screen selects the year; the current year is chosen by default.
+
+| Follows the selected year | Not tied to a year |
+|---|---|
+| Students (by the year they were admitted) and their fee status | Courses (catalogue; counts shown are for the selected year) |
+| Payments, refunds, expenses, faculty payouts (by date) | Faculty records and agreed payouts |
+| Tests and report cards | Users, activity log, subscription |
+| Dashboard and reports | |
+
+Dues from earlier years stay visible on the dashboard and can still be collected. New admissions are blocked in a year that has ended.
+
 ## Project layout
 
 ```
@@ -62,7 +77,11 @@ See `.env.example`. Required: `ConnectionStrings__AcademyDb`, `OWNER_EMAIL`, `OW
 
 Optional, each works without the other:
 
-- **Email (`Email__*`)** – password-reset links, welcome emails, fee reminders, invoices. Until configured, emails are logged, not sent.
+- **Email (`Email__*`)** – password-reset links, welcome emails, fee reminders, invoices. Until configured, messages are written to the
+  server log and marked *failed – not configured*. Any SMTP service works, for example Brevo, Zoho ZeptoMail, Amazon SES,
+  or a Google Workspace / Gmail account with an app password (fine for testing, low daily limits). Use a sender address on
+  a domain you own and add the provider's SPF and DKIM records to that domain, or messages will land in spam. After
+  setting the variables and restarting, use **Send test email** on the owner Overview page.
 - **Razorpay (`Razorpay__*`)** – online payment of subscription invoices. Until configured, academies pay you directly and you click *Mark paid*.
   Set the webhook URL in Razorpay to `https://<your-site>/api/billing/webhooks/razorpay` (events `payment.captured`, `order.paid`).
 

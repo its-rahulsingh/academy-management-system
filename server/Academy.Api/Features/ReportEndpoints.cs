@@ -3,6 +3,7 @@ using System.Text;
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
+using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,17 +19,20 @@ public sealed record CourseFinance(Guid CourseId, string CourseName, int Student
 
 public static class FinanceQueries
 {
-    public static async Task<List<CourseFinance>> CourseFinancesAsync(this AcademyDbContext db, CancellationToken ct)
+    /// <summary>Fee position per course for the students admitted in the given year (all years when null).</summary>
+    public static async Task<List<CourseFinance>> CourseFinancesAsync(this AcademyDbContext db, Guid? yearId, CancellationToken ct)
     {
         var courses = await db.Courses.AsNoTracking().Select(c => new { c.Id, c.Name }).ToListAsync(ct);
-        var fees = await db.Students.GroupBy(s => s.CourseId)
+        var fees = await db.Students.Where(s => yearId == null || s.AcademicYearId == yearId).GroupBy(s => s.CourseId)
             .Select(g => new { CourseId = g.Key, Students = g.Count(), Fees = g.Sum(s => s.FeeAmount) })
             .ToDictionaryAsync(x => x.CourseId, ct);
-        var adjustments = await db.FeeAdjustments.Where(a => a.Status == LedgerStatus.Posted)
+        var adjustments = await db.FeeAdjustments
+            .Where(a => a.Status == LedgerStatus.Posted && (yearId == null || a.Student.AcademicYearId == yearId))
             .GroupBy(a => new { a.Student.CourseId, a.Kind })
             .Select(g => new { g.Key.CourseId, g.Key.Kind, Amount = g.Sum(a => a.Amount) })
             .ToListAsync(ct);
-        var payments = await db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted)
+        var payments = await db.StudentPayments
+            .Where(p => p.Status == LedgerStatus.Posted && (yearId == null || p.Student.AcademicYearId == yearId))
             .GroupBy(p => new { p.Student.CourseId, p.Kind })
             .Select(g => new { g.Key.CourseId, g.Key.Kind, Amount = g.Sum(p => p.Amount) })
             .ToListAsync(ct);
@@ -49,12 +53,13 @@ public static class DashboardEndpoints
     public static void MapDashboardEndpoints(this RouteGroupBuilder academy) =>
         academy.MapGet("/dashboard", Dashboard).RequireAuthorization();
 
-    private static async Task<IResult> Dashboard(HttpContext http, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Dashboard(HttpContext http, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
+        var year = await years.GetAsync(ct);
         var counts = new
         {
-            totalStudents = await db.Students.CountAsync(ct),
-            activeStudents = await db.Students.CountAsync(s => s.Active, ct),
+            totalStudents = await db.Students.InYear(year).CountAsync(ct),
+            activeStudents = await db.Students.InYear(year).CountAsync(s => s.Active, ct),
             totalCourses = await db.Courses.CountAsync(ct),
             totalFaculty = await db.Faculty.CountAsync(ct)
         };
@@ -62,18 +67,31 @@ public static class DashboardEndpoints
         // Money figures are omitted entirely (not zeroed) for roles that may not see them.
         if (!http.User.Has(Permissions.DashboardFinance)) return Results.Ok(new { counts, finance = (object?)null });
 
-        var courses = await db.CourseFinancesAsync(ct);
+        var courses = await db.CourseFinancesAsync(year?.Id, ct);
+        // Faculty agreements are not tied to a year, so what is still owed to faculty is an all-time figure.
         var agreed = await db.Faculty.SumAsync(f => (decimal?)f.AgreedPayout, ct) ?? 0;
-        var paidOut = await db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
-        var expenses = await db.Expenses.Where(e => e.Status == LedgerStatus.Posted).SumAsync(e => (decimal?)e.Amount, ct) ?? 0;
+        var paidOutEver = await db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+        var paidOut = await db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+        var expenses = await db.Expenses.Where(e => e.Status == LedgerStatus.Posted).Between(year, e => e.SpentOn)
+            .SumAsync(e => (decimal?)e.Amount, ct) ?? 0;
+        // Cash received during the year, whichever year the paying student was admitted in.
+        var payments = db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn);
+        var received = await payments.Where(p => p.Kind == PaymentKind.Payment).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+        var refunded = await payments.Where(p => p.Kind == PaymentKind.Refund).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+        // Dues still owed by students admitted in earlier years, so they are not forgotten when a new year starts.
+        var earlierDues = year is null ? 0 : await db.StudentBalances()
+            .Where(s => s.AcademicYearId != year.Id && db.AcademicYears.Any(y => y.Id == s.AcademicYearId && y.StartDate < year.Start))
+            .WithStatus("Due")
+            .SumAsync(s => (decimal?)(s.FeeAmount - s.Discounts + s.Surcharges - (s.Received - s.Refunded)), ct) ?? 0;
         var recent = await db.StudentPayments.AsNoTracking()
-            .Where(p => p.Status == LedgerStatus.Posted)
+            .Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn)
             .OrderByDescending(p => p.PaidOn).ThenByDescending(p => p.ReceiptNumber)
             .Take(6)
             .Select(p => new { p.Id, StudentName = p.Student.FullName, p.Kind, p.Amount, p.PaidOn, p.Method })
             .ToListAsync(ct);
 
-        var collected = courses.Sum(c => c.Collected);
+        var collected = received - refunded;
         return Results.Ok(new
         {
             counts,
@@ -81,10 +99,11 @@ public static class DashboardEndpoints
             {
                 totalRevenue = collected,
                 pendingFees = courses.Sum(c => c.Pending),
-                facultyPayable = Math.Max(0, agreed - paidOut),
+                earlierYearsPending = earlierDues,
+                facultyPayable = Math.Max(0, agreed - paidOutEver),
                 facultyPaidOut = paidOut,
                 totalExpenses = expenses,
-                // Cash basis: money in minus money out. Not accounting profit.
+                // Cash basis: money in minus money out during the year. Not accounting profit.
                 netCashBalance = collected - expenses - paidOut,
                 recentPayments = recent,
                 coursePerformance = courses.Select(c => new { c.CourseName, c.Students, c.Collected, c.Pending })
@@ -104,16 +123,18 @@ public static class ReportEndpoints
         group.MapGet("/export/{kind}", Export);
     }
 
-    private static (DateOnly From, DateOnly To) Range(DateOnly? from, DateOnly? to)
+    /// <summary>Explicit dates win; otherwise the selected academic year; with no year, the last twelve months.</summary>
+    private static (DateOnly From, DateOnly To) Range(DateOnly? from, DateOnly? to, YearRange? year)
     {
-        var end = to ?? Validate.Today;
-        var start = from ?? new DateOnly(end.Year, end.Month, 1).AddMonths(-11);
+        var end = to ?? year?.End ?? Validate.Today;
+        var start = from ?? year?.Start ?? new DateOnly(end.Year, end.Month, 1).AddMonths(-11);
         return start <= end ? (start, end) : (end, start);
     }
 
-    private static async Task<IResult> Summary(DateOnly? from, DateOnly? to, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Summary(DateOnly? from, DateOnly? to, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var (start, end) = Range(from, to);
+        var year = await years.GetAsync(ct);
+        var (start, end) = Range(from, to, year);
         var payments = db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted && p.PaidOn >= start && p.PaidOn <= end);
         var expenses = db.Expenses.Where(e => e.Status == LedgerStatus.Posted && e.SpentOn >= start && e.SpentOn <= end);
         var payouts = db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted && p.PaidOn >= start && p.PaidOn <= end);
@@ -143,7 +164,7 @@ public static class ReportEndpoints
         var refunds = paymentMonths.Where(m => m.Kind == PaymentKind.Refund).Sum(m => m.Amount);
         var totalExpenses = expenseMonths.Sum(m => m.Amount);
         var totalPayouts = payoutMonths.Sum(m => m.Amount);
-        var courses = await db.CourseFinancesAsync(ct);
+        var courses = await db.CourseFinancesAsync(year?.Id, ct);
 
         return Results.Ok(new
         {
@@ -158,14 +179,15 @@ public static class ReportEndpoints
             byMethod = byMethod.OrderByDescending(m => m.Amount),
             expensesByCategory = byCategory.OrderByDescending(c => c.Amount),
             months,
-            // Outstanding fees are a position as of now, not a flow within the date range.
+            // Outstanding fees are a position as of now for the selected year's students, not a flow within the date range.
             courses = courses.Select(c => new { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending })
         });
     }
 
-    private static async Task<IResult> Export(string kind, DateOnly? from, DateOnly? to, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Export(string kind, DateOnly? from, DateOnly? to, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var (start, end) = Range(from, to);
+        var year = await years.GetAsync(ct);
+        var (start, end) = Range(from, to, year);
         var csv = new Csv();
 
         switch (kind)
@@ -200,10 +222,12 @@ public static class ReportEndpoints
                 break;
 
             case "students":
-                csv.Row("Student", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Pending", "Status", "Active");
-                var students = await db.StudentBalances().OrderBy(s => s.FullName).Take(MaxExportRows).ToListAsync(ct);
+                csv.Row("Student", "Academic year", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Pending", "Status", "Active");
+                var students = await db.StudentBalances()
+                    .Where(s => year == null || s.AcademicYearId == year.Id)
+                    .OrderBy(s => s.FullName).Take(MaxExportRows).ToListAsync(ct);
                 foreach (var s in students)
-                    csv.Row(s.FullName, s.Email, s.Phone, s.CourseName, s.AdmissionDate, s.FeeAmount, s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status, s.Active ? "Yes" : "No");
+                    csv.Row(s.FullName, s.AcademicYearName, s.Email, s.Phone, s.CourseName, s.AdmissionDate, s.FeeAmount, s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status, s.Active ? "Yes" : "No");
                 break;
 
             default:

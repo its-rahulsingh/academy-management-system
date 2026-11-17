@@ -16,6 +16,19 @@ internal static class LedgerColumns
     }
 }
 
+internal sealed class AcademicYearConfiguration : IEntityTypeConfiguration<AcademicYear>
+{
+    public void Configure(EntityTypeBuilder<AcademicYear> e)
+    {
+        e.ToTable("academic_years");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        e.HasIndex(x => new { x.TenantId, x.StartDate }).IsUnique();
+        e.Property(x => x.Name).HasMaxLength(40);
+        e.ToTable(t => t.HasCheckConstraint("ck_academic_years_dates", "end_date > start_date"));
+    }
+}
+
 internal sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
 {
     public void Configure(EntityTypeBuilder<Course> e)
@@ -34,15 +47,16 @@ internal sealed class StudentConfiguration : IEntityTypeConfiguration<Student>
     {
         e.ToTable("students");
         e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.AcademicYearId, x.CreatedAtUtc });
         e.HasIndex(x => new { x.TenantId, x.CourseId });
         e.HasIndex(x => new { x.TenantId, x.FullName });
-        e.HasIndex(x => new { x.TenantId, x.CreatedAtUtc });
         e.Property(x => x.FullName).HasMaxLength(Columns.Name);
         e.Property(x => x.Email).HasMaxLength(Columns.Email);
         e.Property(x => x.Phone).HasMaxLength(Columns.Phone);
         e.Property(x => x.Remarks).HasMaxLength(Columns.Notes);
         e.Property(x => x.FeeAmount).IsMoney();
         e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

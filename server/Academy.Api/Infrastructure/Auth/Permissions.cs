@@ -53,12 +53,14 @@ public static class Permissions
     public const string UsersManage = "users.manage";
     public const string AuditRead = "audit.read";
     public const string BillingManage = "billing.manage";
+    /// <summary>Add academic years and change the dates of the current and future ones.</summary>
+    public const string YearsManage = "years.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
         DashboardFinance, StudentsRead, StudentsWrite, CoursesRead, CoursesWrite, FacultyRead, FacultyWrite,
         PaymentsRead, PaymentsWrite, LedgerCorrect, PayoutsRead, PayoutsWrite, ExpensesRead, ExpensesWrite,
-        TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage
+        TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage, YearsManage
     ];
 }
 
@@ -67,7 +69,7 @@ public static class RolePermissions
     private static readonly FrozenDictionary<string, FrozenSet<string>> Map = new Dictionary<string, FrozenSet<string>>
     {
         [Roles.SuperAdmin] = Permissions.All.ToFrozenSet(),
-        [Roles.Admin] = Permissions.All.Except([Permissions.BillingManage]).ToFrozenSet(),
+        [Roles.Admin] = Permissions.All.Except([Permissions.BillingManage, Permissions.YearsManage]).ToFrozenSet(),
         [Roles.Accountant] = new[]
         {
             Permissions.DashboardFinance, Permissions.StudentsRead, Permissions.CoursesRead, Permissions.FacultyRead,

@@ -39,7 +39,7 @@ export interface PaymentSaved {
               <li>
                 <button type="button" [class.active]="match.id === selected()?.id" (click)="picked.set(match)">
                   <strong>{{ match.fullName }}</strong>
-                  <small>{{ match.courseName }} · due {{ match.pending | money }}</small>
+                  <small>{{ match.courseName }} · {{ match.academicYearName }} · due {{ match.pending | money }}</small>
                 </button>
               </li>
             }

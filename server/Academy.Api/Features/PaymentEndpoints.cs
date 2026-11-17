@@ -50,9 +50,10 @@ public static class PaymentEndpoints
         return payments;
     }
 
-    private static async Task<IResult> List([AsParameters] PaymentListQuery query, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> List([AsParameters] PaymentListQuery query, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var page = await Filter(db.StudentPayments.AsNoTracking(), query)
+        var year = await years.GetAsync(ct);
+        var page = await Filter(db.StudentPayments.AsNoTracking().Between(year, p => p.PaidOn), query)
             .OrderByDescending(p => p.PaidOn).ThenByDescending(p => p.ReceiptNumber)
             .Select(p => new
             {
@@ -68,11 +69,12 @@ public static class PaymentEndpoints
         }));
     }
 
-    private static async Task<IResult> Summary(AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Summary(AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
         var today = Validate.Today;
         var monthStart = new DateOnly(today.Year, today.Month, 1);
-        var posted = db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted);
+        var year = await years.GetAsync(ct);
+        var posted = db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn);
 
         var received = await posted.Where(p => p.Kind == PaymentKind.Payment).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
         var refunded = await posted.Where(p => p.Kind == PaymentKind.Refund).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;

@@ -29,9 +29,9 @@ import { UI, initials } from '../../shared/ui';
     @if (data(); as d) {
       @if (finance(); as f) {
         <div class="stats four">
-          <article class="stat purple"><div class="stat-top">COLLECTED</div><div class="stat-value">{{ f.totalRevenue | money }}</div><small>Fees received, net of refunds</small></article>
-          <article class="stat yellow"><div class="stat-top">PENDING FEES</div><div class="stat-value">{{ f.pendingFees | money }}</div><small>Outstanding student balances</small></article>
-          <article class="stat pink"><div class="stat-top">FACULTY PAYABLE</div><div class="stat-value">{{ f.facultyPayable | money }}</div><small>Agreed payouts not yet paid</small></article>
+          <article class="stat purple"><div class="stat-top">COLLECTED</div><div class="stat-value">{{ f.totalRevenue | money }}</div><small>Fees received this year, net of refunds</small></article>
+          <article class="stat yellow"><div class="stat-top">PENDING FEES</div><div class="stat-value">{{ f.pendingFees | money }}</div><small>Owed by this year's students</small></article>
+          <article class="stat pink"><div class="stat-top">FACULTY PAYABLE</div><div class="stat-value">{{ f.facultyPayable | money }}</div><small>Agreed payouts not yet paid (all years)</small></article>
           <article class="stat green"><div class="stat-top">NET CASH BALANCE</div><div class="stat-value">{{ f.netCashBalance | money }}</div><small>Collections minus expenses and payouts</small></article>
           <article class="stat rose"><div class="stat-top">EXPENSES</div><div class="stat-value">{{ f.totalExpenses | money }}</div><small>Operating spend recorded</small></article>
           <article class="stat amber"><div class="stat-top">FACULTY PAID</div><div class="stat-value">{{ f.facultyPaidOut | money }}</div><small>Payouts completed</small></article>
@@ -41,8 +41,8 @@ import { UI, initials } from '../../shared/ui';
 
         <div class="dashboard-grid">
           <section class="surface">
-            <div class="surface-title"><h2>Collected by course</h2><span>ALL TIME</span></div>
-            <p class="muted">Fees received for each course, net of refunds</p>
+            <div class="surface-title"><h2>Collected by course</h2><span>THIS YEAR'S STUDENTS</span></div>
+            <p class="muted">Fees received from students admitted this year, net of refunds</p>
             @if (f.coursePerformance.length) {
               <div class="graph">
                 @for (course of f.coursePerformance; track course.courseName) {
@@ -61,6 +61,9 @@ import { UI, initials } from '../../shared/ui';
             <div class="surface-title"><h2>Needs attention</h2><span>LIVE</span></div>
             <div class="insight yellow-note">{{ f.pendingFees | money }} in fees still to collect</div>
             <div class="insight pink-note">{{ f.facultyPayable | money }} owed to faculty</div>
+            @if (f.earlierYearsPending > 0) {
+              <div class="insight pink-note">{{ f.earlierYearsPending | money }} still due from students of earlier years</div>
+            }
             <div class="insight blue-note">{{ d.counts.activeStudents }} active students across {{ d.counts.totalCourses }} courses</div>
           </section>
         </div>

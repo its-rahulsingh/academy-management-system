@@ -47,11 +47,16 @@ public sealed class EmailQueue(AcademyDbContext db)
 
 public interface IEmailTransport
 {
+    /// <summary>False for the stand-in used before SMTP is set up: it only writes the message to the log.</summary>
+    bool IsConfigured { get; }
+
     Task SendAsync(EmailMessage message, CancellationToken ct);
 }
 
 public sealed class SmtpEmailTransport(IOptions<EmailOptions> options) : IEmailTransport
 {
+    public bool IsConfigured => true;
+
     public async Task SendAsync(EmailMessage message, CancellationToken ct)
     {
         var settings = options.Value;
@@ -73,6 +78,8 @@ public sealed class SmtpEmailTransport(IOptions<EmailOptions> options) : IEmailT
 /// <summary>Stand-in used until SMTP is configured: the message is written to the server log instead of sent.</summary>
 public sealed class LogEmailTransport(ILogger<LogEmailTransport> logger) : IEmailTransport
 {
+    public bool IsConfigured => false;
+
     public Task SendAsync(EmailMessage message, CancellationToken ct)
     {
         logger.LogWarning("Email not configured. Would send [{Category}] to {To}: {Subject}\n{Body}",
@@ -86,6 +93,7 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
 {
     private const int BatchSize = 20;
     private const int MaxAttempts = 5;
+    public const string NotConfiguredError = "Not delivered: email is not configured, so the message was only written to the server log.";
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -128,6 +136,15 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
             foreach (var message in batch)
             {
                 message.Attempts++;
+                if (!transport.IsConfigured)
+                {
+                    // Write it to the log so a developer can still read reset links, but never report it as sent.
+                    await transport.SendAsync(message, ct);
+                    message.Status = EmailStatus.Failed;
+                    message.LastError = NotConfiguredError;
+                    continue;
+                }
+
                 try
                 {
                     await transport.SendAsync(message, ct);

@@ -33,6 +33,7 @@ public static class Startup
         services.AddMemoryCache();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
         services.AddScoped<TenantAccessService>();
+        services.AddScoped<AcademicYearScope>();
         services.AddScoped<EmailQueue>();
         services.AddScoped<BillingService>();
         services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
@@ -134,11 +135,13 @@ public static class Startup
 
         app.MapAuthEndpoints();
         app.MapPlatformEndpoints();
+        app.MapEmailAdminEndpoints();
         app.MapBillingEndpoints();
 
         // Everything an academy does with its own data sits behind one gate: signed in, belongs to an
         // academy, and that academy's subscription is in good standing.
         var academy = app.MapGroup("/api").RequireAuthorization().AddEndpointFilter<TenantAccessFilter>();
+        academy.MapAcademicYearEndpoints();
         academy.MapDashboardEndpoints();
         academy.MapCourseEndpoints();
         academy.MapStudentEndpoints();

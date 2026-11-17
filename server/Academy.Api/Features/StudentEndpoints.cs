@@ -46,7 +46,7 @@ public static class StudentEndpoints
 
     private static object ToDto(StudentBalance s) => new
     {
-        s.Id, s.FullName, s.Email, s.Phone, s.CourseId, s.CourseName, s.FeeAmount, s.AdmissionDate, s.Remarks, s.Active,
+        s.Id, s.AcademicYearId, s.AcademicYearName, s.FullName, s.Email, s.Phone, s.CourseId, s.CourseName, s.FeeAmount, s.AdmissionDate, s.Remarks, s.Active,
         s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status
     };
 
@@ -58,9 +58,11 @@ public static class StudentEndpoints
                                || EF.Functions.ILike(r.Phone, like) || EF.Functions.ILike(r.CourseName, like));
     }
 
-    private static async Task<IResult> List([AsParameters] StudentListQuery query, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> List([AsParameters] StudentListQuery query, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
+        var year = await years.GetAsync(ct);
         var rows = Search(db.StudentBalances(), query.Search).WithStatus(query.Status);
+        if (year is not null) rows = rows.Where(r => r.AcademicYearId == year.Id);
         if (query.CourseId is { } courseId) rows = rows.Where(r => r.CourseId == courseId);
         if (query.Active is { } active) rows = rows.Where(r => r.Active == active);
 
@@ -68,15 +70,21 @@ public static class StudentEndpoints
         return Results.Ok(page.Map(ToDto));
     }
 
-    /// <summary>Small typeahead list for pickers, so forms never download the whole student table.</summary>
-    private static async Task<IResult> Lookup(string? search, Guid? courseId, bool? dueOnly, int? limit, AcademyDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Small typeahead list for pickers, so forms never download the whole student table.
+    /// Searches every year by default, so dues from an earlier year can still be collected;
+    /// yearOnly narrows it to the selected year (used when entering test marks).
+    /// </summary>
+    private static async Task<IResult> Lookup(
+        string? search, Guid? courseId, bool? dueOnly, bool? yearOnly, int? limit, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
         var rows = Search(db.StudentBalances().Where(r => r.Active), search);
+        if (yearOnly == true && await years.GetAsync(ct) is { } year) rows = rows.Where(r => r.AcademicYearId == year.Id);
         if (courseId is { } id) rows = rows.Where(r => r.CourseId == id);
         if (dueOnly == true) rows = rows.WithStatus("Due");
 
         var items = await rows.OrderBy(r => r.FullName).Take(Math.Clamp(limit ?? 20, 1, MaxLookupResults)).ToListAsync(ct);
-        return Results.Ok(items.Select(r => new { r.Id, r.FullName, r.CourseName, r.Pending, r.Paid }));
+        return Results.Ok(items.Select(r => new { r.Id, r.FullName, r.CourseName, r.AcademicYearName, r.Pending, r.Paid }));
     }
 
     private static async Task<IResult> Get(Guid id, AcademyDbContext db, CancellationToken ct)
@@ -116,9 +124,12 @@ public static class StudentEndpoints
     }
 
     private static async Task<IResult> Create(
-        StudentRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
+        StudentRequest request, AcademyDbContext db, TenantAccessService access, AcademicYearScope years, ICurrentUser currentUser, CancellationToken ct)
     {
         if (ValidateStudent(request) is { } error) return ApiResults.Bad(error);
+        var year = await years.GetAsync(ct);
+        if (year is null) return ApiResults.Bad("Set up an academic year before admitting students.");
+        if (year.IsClosed) return ApiResults.Bad($"Academic year {year.Name} has ended. Switch to the current year to admit students.");
         if (!await db.Courses.AnyAsync(c => c.Id == request.CourseId && c.Active, ct)) return ApiResults.Bad("Select an active course.");
 
         var limits = await access.GetAsync(currentUser.TenantId!.Value, ct);
@@ -127,6 +138,7 @@ public static class StudentEndpoints
 
         var student = new Student
         {
+            AcademicYearId = year.Id,
             FullName = request.FullName!.Trim(),
             Email = Validate.Text(request.Email, 240).ToLowerInvariant(),
             Phone = Validate.Text(request.Phone, 32),
@@ -238,10 +250,11 @@ public static class StudentEndpoints
         return Results.Ok(new { queued = 1 });
     }
 
-    private static async Task<IResult> SendAllReminders(AcademyDbContext db, EmailQueue email, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
+    private static async Task<IResult> SendAllReminders(AcademyDbContext db, EmailQueue email, TenantAccessService access, AcademicYearScope years, ICurrentUser currentUser, CancellationToken ct)
     {
+        var year = await years.GetAsync(ct);
         var due = await db.StudentBalances()
-            .Where(r => r.Active && r.Email != "")
+            .Where(r => r.Active && r.Email != "" && (year == null || r.AcademicYearId == year.Id))
             .WithStatus("Due")
             .OrderBy(r => r.FullName)
             .Take(MaxBulkReminders)

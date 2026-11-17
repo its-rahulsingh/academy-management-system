@@ -47,17 +47,17 @@ public static class ExpenseEndpoints
         return expenses;
     }
 
-    private static async Task<IResult> List([AsParameters] ExpenseListQuery query, AcademyDbContext db, CancellationToken ct) =>
-        Results.Ok(await Filter(db.Expenses.AsNoTracking(), query)
+    private static async Task<IResult> List([AsParameters] ExpenseListQuery query, AcademyDbContext db, AcademicYearScope years, CancellationToken ct) =>
+        Results.Ok(await Filter(db.Expenses.AsNoTracking().Between(await years.GetAsync(ct), e => e.SpentOn), query)
             .OrderByDescending(e => e.SpentOn).ThenByDescending(e => e.CreatedAtUtc)
             .Select(e => new { e.Id, e.Title, e.Amount, e.Category, e.SpentOn, e.Method, e.Notes, e.Status, e.VoidReason })
             .ToPagedAsync(query, ct));
 
-    private static async Task<IResult> Summary(AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Summary(AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
         var today = Validate.Today;
         var monthStart = new DateOnly(today.Year, today.Month, 1);
-        var posted = db.Expenses.Where(e => e.Status == LedgerStatus.Posted);
+        var posted = db.Expenses.Where(e => e.Status == LedgerStatus.Posted).Between(await years.GetAsync(ct), e => e.SpentOn);
 
         var byCategory = await posted.GroupBy(e => e.Category)
             .Select(g => new { Category = g.Key, Amount = g.Sum(e => e.Amount), Count = g.Count() })

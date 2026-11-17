@@ -1,6 +1,7 @@
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
+using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,21 +19,27 @@ public static class CourseEndpoints
         group.MapPut("/{id:guid}", Update).RequirePermission(Permissions.CoursesWrite);
     }
 
-    private static async Task<IResult> List(AcademyDbContext db, CancellationToken ct) =>
-        Results.Ok(await db.Courses.AsNoTracking()
+    /// <summary>The course catalogue is shared by all years; enrolment and collection are for the selected year's students.</summary>
+    private static async Task<IResult> List(AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
+    {
+        var yearId = (await years.GetAsync(ct))?.Id;
+        return Results.Ok(await db.Courses.AsNoTracking()
             .OrderBy(c => c.Name)
             .Select(c => new
             {
                 c.Id, c.Name, c.Fee, c.Active,
-                Enrolled = db.Students.Count(s => s.CourseId == c.Id),
+                Enrolled = db.Students.Count(s => s.CourseId == c.Id && (yearId == null || s.AcademicYearId == yearId)),
                 Collected = (db.StudentPayments
-                        .Where(p => p.Student.CourseId == c.Id && p.Status == LedgerStatus.Posted && p.Kind == PaymentKind.Payment)
+                        .Where(p => p.Student.CourseId == c.Id && (yearId == null || p.Student.AcademicYearId == yearId)
+                                    && p.Status == LedgerStatus.Posted && p.Kind == PaymentKind.Payment)
                         .Sum(p => (decimal?)p.Amount) ?? 0)
                     - (db.StudentPayments
-                        .Where(p => p.Student.CourseId == c.Id && p.Status == LedgerStatus.Posted && p.Kind == PaymentKind.Refund)
+                        .Where(p => p.Student.CourseId == c.Id && (yearId == null || p.Student.AcademicYearId == yearId)
+                                    && p.Status == LedgerStatus.Posted && p.Kind == PaymentKind.Refund)
                         .Sum(p => (decimal?)p.Amount) ?? 0)
             })
             .ToListAsync(ct));
+    }
 
     private static async Task<IResult> Create(CourseRequest request, AcademyDbContext db, CancellationToken ct)
     {

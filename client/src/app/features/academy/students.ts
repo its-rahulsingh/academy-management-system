@@ -1,5 +1,6 @@
 import { Component, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AcademicYearService } from '../../core/academic-year.service';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { Course, Paged, Permission, Student, StudentDetail, StudentLookup } from '../../core/models';
@@ -27,7 +28,9 @@ interface VoidTarget {
           <button type="button" class="secondary" [disabled]="reminding()" (click)="remindAll()">✉ Remind all with dues</button>
         }
         @if (can(permission.StudentsWrite)) {
-          <button type="button" class="primary" (click)="openForm()">+ Add student</button>
+          <button type="button" class="primary" [disabled]="years.isClosed()" [title]="years.isClosed() ? 'This academic year has ended' : ''" (click)="openForm()">
+            + Add student
+          </button>
         }
       </div>
     </div>
@@ -79,7 +82,7 @@ interface VoidTarget {
     </div>
 
     @if (form.open()) {
-      <app-modal [title]="model.id ? 'Edit student' : 'Add student'" [busy]="form.busy()" [error]="form.error()" (closed)="form.close()" (saved)="save()">
+      <app-modal [title]="model.id ? 'Edit student' : 'Add student to ' + (years.selected()?.name ?? '')" [busy]="form.busy()" [error]="form.error()" (closed)="form.close()" (saved)="save()">
         <label for="fullName">Full name *</label>
         <input id="fullName" [(ngModel)]="model.fullName" maxlength="150" />
         <div class="two-fields">
@@ -122,7 +125,7 @@ interface VoidTarget {
           <div><small>PENDING</small><b class="negative">{{ d.student.pending | money }}</b></div>
         </div>
         <p class="helper">
-          {{ d.student.courseName }} · admitted {{ d.student.admissionDate | day }}
+          {{ d.student.courseName }} · {{ d.student.academicYearName }} · admitted {{ d.student.admissionDate | day }}
           @if (d.student.phone) { · {{ d.student.phone }} }
           @if (d.student.email) { · {{ d.student.email }} }
         </p>
@@ -143,6 +146,9 @@ interface VoidTarget {
           }
           @if (can(permission.StudentsWrite)) {
             <button type="button" class="secondary" (click)="openForm(d.student)">Edit details</button>
+          }
+          @if (can(permission.TestsRead)) {
+            <a class="secondary" [routerLink]="['/app/tests/report-cards', d.student.id]">Report card</a>
             <button type="button" class="secondary" (click)="setActive(d.student, !d.student.active)">
               {{ d.student.active ? 'Mark inactive' : 'Mark active' }}
             </button>
@@ -231,6 +237,7 @@ export class StudentsComponent {
   private readonly api = inject(Api);
   private readonly auth = inject(AuthService);
   private readonly notify = inject(Notify);
+  protected readonly years = inject(AcademicYearService);
 
   /** Set by the dashboard's "Add student" shortcut (?new=1). */
   readonly openNew = input<string>(undefined, { alias: 'new' });
@@ -264,7 +271,7 @@ export class StudentsComponent {
     this.list.load();
     this.api.get<Course[]>('courses').subscribe({ next: courses => this.courses.set(courses), error: e => this.pageError.set(errorMessage(e)) });
     effect(() => {
-      if (this.openNew() && this.can(Permission.StudentsWrite)) this.openForm();
+      if (this.openNew() && this.can(Permission.StudentsWrite) && !this.years.isClosed()) this.openForm();
     });
   }
 

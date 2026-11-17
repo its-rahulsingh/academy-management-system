@@ -24,11 +24,13 @@ export const routes: Routes = [
       { path: 'faculty', canActivate: [requires(Permission.FacultyRead)], loadComponent: () => import('./features/academy/faculty').then(m => m.FacultyComponent) },
       { path: 'payments', canActivate: [requires(Permission.PaymentsRead)], loadComponent: () => import('./features/academy/payments').then(m => m.PaymentsComponent) },
       { path: 'payments/:id/receipt', canActivate: [requires(Permission.PaymentsRead)], loadComponent: () => import('./features/academy/receipt').then(m => m.ReceiptComponent) },
+      { path: 'tests/report-cards/:id', canActivate: [requires(Permission.TestsRead)], loadComponent: () => import('./features/academy/report-card').then(m => m.ReportCardComponent) },
       { path: 'expenses', canActivate: [requires(Permission.ExpensesRead)], loadComponent: () => import('./features/academy/expenses').then(m => m.ExpensesComponent) },
       { path: 'tests', canActivate: [requires(Permission.TestsRead)], loadComponent: () => import('./features/academy/tests').then(m => m.TestsComponent) },
       { path: 'reports', canActivate: [requires(Permission.ReportsRead)], loadComponent: () => import('./features/academy/reports').then(m => m.ReportsComponent) },
       { path: 'users', canActivate: [requires(Permission.UsersManage)], loadComponent: () => import('./features/academy/users').then(m => m.UsersComponent) },
       { path: 'audit', canActivate: [requires(Permission.AuditRead)], loadComponent: () => import('./features/academy/audit').then(m => m.AuditComponent) },
+      { path: 'academic-years', canActivate: [requires()], loadComponent: () => import('./features/academy/academic-years').then(m => m.AcademicYearsComponent) },
       // No subscription check here: an expired academy must be able to reach this page to pay.
       { path: 'billing', loadComponent: () => import('./features/academy/billing').then(m => m.BillingComponent) },
     ],

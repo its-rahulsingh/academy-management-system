@@ -184,4 +184,53 @@ public sealed class LedgerTests(AppFactory factory)
             db.EmailMessages.Where(m => m.TenantId == academy.Id && m.Category == "FeeReminder").Select(m => m.ToAddress).ToList()));
         Assert.Equal(["owes@family.test"], queued);
     }
+
+    [Fact]
+    public async Task Report_card_shows_test_history_with_class_average_and_rank()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var courseId = await academy.NewCourseAsync("Science");
+        var asha = await academy.NewStudentAsync(courseId, name: "Asha");
+        var kabir = await academy.NewStudentAsync(courseId, name: "Kabir");
+        var zoya = await academy.NewStudentAsync(courseId, name: "Zoya");
+
+        async Task<Guid> NewTestAsync(string title, string subject, string date, int maxMarks) =>
+            (await (await academy.Admin.PostAsJsonAsync("/api/tests", new { title, subject, courseId, maxMarks, testDate = date })).ReadJsonAsync())["id"]!.GetValue<Guid>();
+        Task Mark(Guid test, Guid student, decimal marks) =>
+            academy.Admin.PutAsJsonAsync($"/api/tests/{test}/results/{student}", new { marks, remarks = "" });
+
+        var physics = await NewTestAsync("Physics 1", "Physics", "2026-07-01", 50);
+        var maths = await NewTestAsync("Maths 1", "Maths", "2026-08-01", 100);
+        await Mark(physics, asha, 40);
+        await Mark(physics, kabir, 45);
+        await Mark(physics, zoya, 20);
+        await Mark(maths, asha, 90);
+        await Mark(maths, kabir, 60);
+
+        var card = await academy.Admin.GetJsonAsync($"/api/tests/report-cards/{asha}");
+        var tests = card["tests"]!.AsArray();
+
+        Assert.Equal("Asha", card["student"]!["fullName"]!.GetValue<string>());
+        Assert.Equal(["Physics 1", "Maths 1"], tests.Select(t => t!["title"]!.GetValue<string>()));
+        Assert.Equal(80, tests[0]!.Money("percent"));
+        Assert.Equal(70, tests[0]!.Money("classAveragePercent"));
+        Assert.Equal((2, 3), (tests[0]!["rank"]!.GetValue<int>(), tests[0]!["takers"]!.GetValue<int>()));
+        Assert.Equal((1, 2), (tests[1]!["rank"]!.GetValue<int>(), tests[1]!["takers"]!.GetValue<int>()));
+        Assert.Equal(85, card["summary"]!.Money("averagePercent"));
+        Assert.Equal("Maths 1", card["summary"]!["best"]!["title"]!.GetValue<string>());
+        Assert.Equal(2, card["subjects"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public async Task Report_card_is_private_to_the_academy_and_hidden_from_accountants()
+    {
+        var a = await factory.NewAcademyAsync();
+        var b = await factory.NewAcademyAsync();
+        var studentId = await a.NewStudentAsync(await a.NewCourseAsync());
+        var accountant = await a.NewUserAsync("Accountant");
+
+        Assert.Equal(HttpStatusCode.NotFound, (await b.Admin.GetAsync($"/api/tests/report-cards/{studentId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await accountant.GetAsync($"/api/tests/report-cards/{studentId}")).StatusCode);
+        Assert.Equal(0, (await a.Admin.GetJsonAsync($"/api/tests/report-cards/{studentId}"))["summary"]!["testsTaken"]!.GetValue<int>());
+    }
 }

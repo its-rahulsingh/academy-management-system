@@ -1,4 +1,5 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { AcademyTest, Course, Paged, Permission, ReportCard, StudentLookup, TestResult } from '../../core/models';
@@ -6,7 +7,7 @@ import { UI, today } from '../../shared/ui';
 
 @Component({
   selector: 'app-tests',
-  imports: [UI],
+  imports: [RouterLink, UI],
   template: `
     <div class="page-header">
       <div>
@@ -53,7 +54,7 @@ import { UI, today } from '../../shared/ui';
       <div class="filter-bar"><input placeholder="⌕  Search students…" [ngModel]="search()" (ngModelChange)="onSearch($event)" /></div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>STUDENT</th><th>COURSE</th><th>TESTS TAKEN</th><th>AVERAGE</th></tr></thead>
+          <thead><tr><th>STUDENT</th><th>COURSE</th><th>TESTS TAKEN</th><th>AVERAGE</th><th></th></tr></thead>
           <tbody>
             @for (card of cards.items(); track card.studentId) {
               <tr>
@@ -61,9 +62,10 @@ import { UI, today } from '../../shared/ui';
                 <td>{{ card.courseName }}</td>
                 <td>{{ card.testsTaken }}</td>
                 <td>{{ card.averagePercent === null ? 'No results yet' : round(card.averagePercent) + '%' }}</td>
+                <td class="row-actions"><a class="table-action" [routerLink]="['/app/tests/report-cards', card.studentId]">Report card →</a></td>
               </tr>
             } @empty {
-              <tr><td colspan="4" class="empty">No students found.</td></tr>
+              <tr><td colspan="5" class="empty">No students found.</td></tr>
             }
           </tbody>
         </table>
@@ -98,36 +100,56 @@ import { UI, today } from '../../shared/ui';
         <p class="helper">{{ t.courseName }} · {{ t.testDate | day }} · out of {{ t.maxMarks }}</p>
         <div class="table-scroll">
           <table class="compact">
-            <thead><tr><th>STUDENT</th><th>MARKS</th><th>%</th><th>REMARKS</th></tr></thead>
+            <thead><tr><th>STUDENT</th><th>MARKS</th><th>%</th><th>REMARKS</th><th></th></tr></thead>
             <tbody>
               @for (r of results(); track r.id) {
-                <tr>
+                <tr [class.editing-row]="editing()?.studentId === r.studentId">
                   <td><strong>{{ r.studentName }}</strong></td>
                   <td>{{ r.marks }} / {{ t.maxMarks }}</td>
                   <td class="positive">{{ percent(r.marks, t.maxMarks) }}</td>
                   <td>{{ r.remarks || '—' }}</td>
+                  <td class="row-actions">
+                    @if (canEdit) {
+                      <button type="button" class="table-action" (click)="editResult(r)">Edit</button>
+                    }
+                  </td>
                 </tr>
               } @empty {
-                <tr><td colspan="4" class="empty">No marks entered yet.</td></tr>
+                <tr><td colspan="5" class="empty">No marks entered yet.</td></tr>
               }
             </tbody>
           </table>
         </div>
 
         @if (canEdit) {
-          <h3 class="section-title">Enter or correct a result</h3>
-          <label for="student">Student *</label>
-          <select id="student" [(ngModel)]="resultModel.studentId">
-            <option value="" disabled>Select student</option>
-            @for (s of eligible(); track s.id) {
-              <option [value]="s.id">{{ s.fullName }}</option>
+          @if (editing(); as e) {
+            <h3 class="section-title">Correct the result for {{ e.studentName }}</h3>
+          } @else {
+            <h3 class="section-title">Enter a result</h3>
+            @if (remaining().length) {
+              <label for="student">Student *</label>
+              <select id="student" [(ngModel)]="resultModel.studentId">
+                <option value="" disabled>Select student ({{ remaining().length }} without marks)</option>
+                @for (s of remaining(); track s.id) {
+                  <option [value]="s.id">{{ s.fullName }}</option>
+                }
+              </select>
+            } @else {
+              <p class="helper">Every student of {{ t.courseName }} in this academic year has a result. Use Edit above to correct one.</p>
             }
-          </select>
-          <div class="two-fields">
-            <div><label for="marks">Marks *</label><input id="marks" type="number" min="0" [max]="t.maxMarks" step="0.5" [(ngModel)]="resultModel.marks" /></div>
-            <div><label for="remarks">Remarks</label><input id="remarks" maxlength="600" [(ngModel)]="resultModel.remarks" /></div>
-          </div>
-          <div class="button-row"><button type="button" class="primary" [disabled]="savingResult()" (click)="saveResult(t)">Save result</button></div>
+          }
+          @if (editing() || remaining().length) {
+            <div class="two-fields">
+              <div><label for="marks">Marks *</label><input id="marks" type="number" min="0" [max]="t.maxMarks" step="0.5" [(ngModel)]="resultModel.marks" /></div>
+              <div><label for="remarks">Remarks</label><input id="remarks" maxlength="600" [(ngModel)]="resultModel.remarks" /></div>
+            </div>
+            <div class="button-row">
+              <button type="button" class="primary" [disabled]="savingResult()" (click)="saveResult(t)">{{ editing() ? 'Save correction' : 'Save result' }}</button>
+              @if (editing()) {
+                <button type="button" class="secondary" (click)="cancelEdit()">Cancel</button>
+              }
+            </div>
+          }
         }
       </app-modal>
     }
@@ -152,6 +174,13 @@ export class TestsComponent {
   protected readonly activeTest = signal<AcademyTest | null>(null);
   protected readonly results = signal<TestResult[]>([]);
   protected readonly eligible = signal<StudentLookup[]>([]);
+  /** Students of the course who have no result for this test yet; once marks are saved a student drops out of the list. */
+  protected readonly remaining = computed(() => {
+    const done = new Set(this.results().map(r => r.studentId));
+    return this.eligible().filter(s => !done.has(s.id));
+  });
+  /** The result being corrected, if any. */
+  protected readonly editing = signal<TestResult | null>(null);
   protected readonly resultError = signal('');
   protected readonly savingResult = signal(false);
   protected resultModel = { studentId: '', marks: 0, remarks: '' };
@@ -197,12 +226,13 @@ export class TestsComponent {
 
   protected openResults(test: AcademyTest): void {
     this.resultModel = { studentId: '', marks: 0, remarks: '' };
+    this.editing.set(null);
     this.resultError.set('');
     this.results.set([]);
     this.activeTest.set(test);
     this.loadResults(test);
     // One class at a time: ask for the whole course rather than the default short typeahead list.
-    this.api.get<StudentLookup[]>('students/lookup', { courseId: test.courseId, limit: 300 }).subscribe(students => this.eligible.set(students));
+    this.api.get<StudentLookup[]>('students/lookup', { courseId: test.courseId, yearOnly: true, limit: 300 }).subscribe(students => this.eligible.set(students));
   }
 
   private loadResults(test: AcademyTest): void {
@@ -210,6 +240,17 @@ export class TestsComponent {
       next: results => this.results.set(results),
       error: e => this.resultError.set(errorMessage(e)),
     });
+  }
+
+  protected editResult(result: TestResult): void {
+    this.editing.set(result);
+    this.resultError.set('');
+    this.resultModel = { studentId: result.studentId, marks: result.marks, remarks: result.remarks };
+  }
+
+  protected cancelEdit(): void {
+    this.editing.set(null);
+    this.resultModel = { studentId: '', marks: 0, remarks: '' };
   }
 
   protected saveResult(test: AcademyTest): void {
@@ -221,6 +262,7 @@ export class TestsComponent {
       next: () => {
         this.savingResult.set(false);
         this.resultModel = { studentId: '', marks: 0, remarks: '' };
+        this.editing.set(null);
         this.loadResults(test);
         this.tests.load();
         this.cards.load();

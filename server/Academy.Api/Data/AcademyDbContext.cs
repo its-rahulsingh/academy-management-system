@@ -29,6 +29,7 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     // Academy
+    public DbSet<AcademicYear> AcademicYears => Set<AcademicYear>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Faculty> Faculty => Set<Faculty>();

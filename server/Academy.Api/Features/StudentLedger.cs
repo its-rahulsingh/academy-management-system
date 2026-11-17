@@ -8,6 +8,8 @@ namespace Academy.Api.Features;
 public sealed class StudentBalance
 {
     public Guid Id { get; init; }
+    public Guid AcademicYearId { get; init; }
+    public string AcademicYearName { get; init; } = "";
     public string FullName { get; init; } = "";
     public string Email { get; init; } = "";
     public string Phone { get; init; } = "";
@@ -41,6 +43,8 @@ public static class StudentLedger
         db.Students.AsNoTracking().Select(s => new StudentBalance
         {
             Id = s.Id,
+            AcademicYearId = s.AcademicYearId,
+            AcademicYearName = s.AcademicYear.Name,
             FullName = s.FullName,
             Email = s.Email,
             Phone = s.Phone,

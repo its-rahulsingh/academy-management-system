@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { AcademicYearService } from '../../core/academic-year.service';
 import { Api, apiUrl, errorMessage } from '../../core/api';
 import { ReportSummary } from '../../core/models';
 import { UI } from '../../shared/ui';
@@ -18,7 +19,7 @@ const EXPORTS = [
       <div>
         <div class="page-kicker">ACADEMY WORKSPACE</div>
         <h1>Reports</h1>
-        <p>Money in and out for a period, and what is still owed.</p>
+        <p>Money in and out for the selected academic year (or the dates you choose), and what is still owed.</p>
       </div>
     </div>
 
@@ -101,7 +102,7 @@ const EXPORTS = [
 
       <section class="surface">
         <div class="surface-title"><h2>Download for Excel</h2></div>
-        <p class="muted">CSV files for the period above. Student fee status is always as of today.</p>
+        <p class="muted">CSV files for the period above. Student fee status lists the selected year's students, as of today.</p>
         <div class="button-row">
           @for (item of exports; track item.kind) {
             <a class="secondary" [href]="exportUrl(item.kind)" download>⤓ {{ item.label }}</a>
@@ -113,6 +114,7 @@ const EXPORTS = [
 })
 export class ReportsComponent {
   private readonly api = inject(Api);
+  private readonly years = inject(AcademicYearService);
   protected readonly exports = EXPORTS;
   protected readonly from = signal('');
   protected readonly to = signal('');
@@ -135,6 +137,6 @@ export class ReportsComponent {
   }
 
   protected exportUrl(kind: string): string {
-    return apiUrl(`reports/export/${kind}`, { from: this.from(), to: this.to() });
+    return apiUrl(`reports/export/${kind}`, { from: this.from(), to: this.to(), academicYearId: this.years.selectedId() });
   }
 }

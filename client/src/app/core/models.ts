@@ -58,11 +58,28 @@ export const Permission = {
   UsersManage: 'users.manage',
   AuditRead: 'audit.read',
   BillingManage: 'billing.manage',
+  YearsManage: 'years.manage',
 } as const;
 
 export const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Card', 'Cheque'] as const;
 
 // ---- Academy ----
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  students: number;
+  isCurrent: boolean;
+  isClosed: boolean;
+}
+
+export interface AcademicYearList {
+  currentId: string | null;
+  canManage: boolean;
+  items: AcademicYear[];
+}
 
 export interface Course {
   id: string;
@@ -75,6 +92,8 @@ export interface Course {
 
 export interface Student {
   id: string;
+  academicYearId: string;
+  academicYearName: string;
   fullName: string;
   email: string;
   phone: string;
@@ -96,6 +115,7 @@ export interface StudentLookup {
   id: string;
   fullName: string;
   courseName: string;
+  academicYearName?: string;
   pending: number;
   paid: number;
 }
@@ -229,11 +249,37 @@ export interface ReportCard {
   averagePercent: number | null;
 }
 
+export interface StudentReportCard {
+  academyName: string | null;
+  student: { id: string; fullName: string; phone: string; email: string; courseName: string; academicYear: string; admissionDate: string; active: boolean };
+  summary: {
+    testsTaken: number;
+    averagePercent: number | null;
+    best: { title: string; percent: number } | null;
+    lowest: { title: string; percent: number } | null;
+  };
+  subjects: { subject: string; tests: number; averagePercent: number }[];
+  tests: {
+    testId: string;
+    title: string;
+    subject: string;
+    testDate: string;
+    maxMarks: number;
+    marks: number;
+    percent: number;
+    classAveragePercent: number;
+    rank: number;
+    takers: number;
+    remarks: string;
+  }[];
+}
+
 export interface Dashboard {
   counts: { totalStudents: number; activeStudents: number; totalCourses: number; totalFaculty: number };
   finance: {
     totalRevenue: number;
     pendingFees: number;
+    earlierYearsPending: number;
     facultyPayable: number;
     facultyPaidOut: number;
     totalExpenses: number;
@@ -406,4 +452,14 @@ export interface PlatformSummary {
   openInvoiceAmount: number;
   overdueInvoices: number;
   collectedThisMonth: number;
+}
+
+export interface EmailStatus {
+  configured: boolean;
+  host: string | null;
+  fromAddress: string | null;
+  pending: number;
+  sent: number;
+  failed: number;
+  recentProblems: { toAddress: string; subject: string; category: string; status: string; attempts: number; lastError: string; createdAtUtc: string }[];
 }

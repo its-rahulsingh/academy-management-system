@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+using Academy.Api.Domain;
+using Academy.Api.Infrastructure.Email;
 using Academy.Api.Tests.Support;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Academy.Api.Tests;
 
@@ -145,5 +148,32 @@ public sealed class AuthAndAccessTests(AppFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, (await academy.Admin.GetAsync("/api/students")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await browser.PostAsJsonAsync("/api/auth/login", new { academyCode = academy.Code, email, password = AppFactory.Password })).StatusCode);
         await browser.LoginAsync(academy.Code, email, newPassword);
+    }
+
+    [Fact]
+    public async Task Without_smtp_settings_queued_email_is_reported_as_not_delivered()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var email = $"admin@{academy.Code}.test";
+        await factory.NewBrowser().PostAsJsonAsync("/api/auth/forgot-password", new { academyCode = academy.Code, email });
+
+        // Other tests share the queue; keep dispatching until it is drained.
+        int handled;
+        do
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            handled = await EmailDispatchService.DispatchBatchAsync(scope.ServiceProvider, CancellationToken.None);
+        } while (handled > 0);
+
+        var message = await factory.WithDbAsync(db => Task.FromResult(
+            db.EmailMessages.Single(m => m.ToAddress == email && m.Category == "PasswordReset")));
+        Assert.Equal(EmailStatus.Failed, message.Status);
+        Assert.Equal(EmailDispatchService.NotConfiguredError, message.LastError);
+
+        var owner = await factory.OwnerAsync();
+        var status = await owner.GetJsonAsync("/api/platform/email");
+        var test = await owner.PostAsJsonAsync("/api/platform/email/test", new { to = "someone@example.test" });
+        Assert.False(status["configured"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.BadRequest, test.StatusCode);
     }
 }

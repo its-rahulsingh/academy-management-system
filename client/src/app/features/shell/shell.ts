@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AcademicYearService } from '../../core/academic-year.service';
 import { Notify, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { Permission } from '../../core/models';
@@ -24,6 +25,7 @@ const ACADEMY_NAV: NavItem[] = [
   { label: 'Reports', icon: '◔', link: '/app/reports', permission: Permission.ReportsRead },
   { label: 'Users', icon: '⚙', link: '/app/users', permission: Permission.UsersManage },
   { label: 'Activity log', icon: '☰', link: '/app/audit', permission: Permission.AuditRead },
+  { label: 'Academic years', icon: '◷', link: '/app/academic-years', permission: Permission.YearsManage },
 ];
 
 const BILLING_NAV: NavItem = { label: 'Subscription', icon: '◈', link: '/app/billing', permission: Permission.BillingManage };
@@ -77,6 +79,25 @@ const PLATFORM_NAV: NavItem[] = [
           <button type="button" (click)="signOut()">Sign out</button>
         </header>
         <div class="page">
+          @if (years.selected(); as year) {
+            <div class="year-bar no-print">
+              <label for="academic-year">Academic year</label>
+              <select id="academic-year" [ngModel]="years.selectedId()" (ngModelChange)="years.select($event)">
+                @for (y of years.years(); track y.id) {
+                  <option [value]="y.id">{{ y.name }}{{ y.isCurrent ? ' (current)' : y.isClosed ? ' (ended)' : ' (upcoming)' }}</option>
+                }
+              </select>
+              <span class="year-dates">{{ year.startDate | day }} – {{ year.endDate | day }}</span>
+              @if (!years.isCurrent() && years.currentId()) {
+                <button type="button" class="text-button" (click)="years.select(years.currentId()!)">Back to current year</button>
+              }
+            </div>
+            @if (year.isClosed) {
+              <div class="alert no-print" role="status">
+                <span>You are viewing {{ year.name }}, which has ended. New admissions are closed for it; outstanding fees can still be collected.</span>
+              </div>
+            }
+          }
           @if (auth.access()?.inGrace) {
             <div class="alert no-print" role="status">
               <span>{{ auth.access()?.reason }}</span>
@@ -90,7 +111,12 @@ const PLATFORM_NAV: NavItem[] = [
               ✓ {{ notify.message() }} <button type="button" (click)="notify.clear()" aria-label="Dismiss">✕</button>
             </div>
           }
-          <router-outlet />
+          @if (years.ready()) {
+            <!-- Re-created when the year changes, so every screen reloads its data for the new year. -->
+            @for (key of [years.selectedId()]; track key) {
+              <router-outlet />
+            }
+          }
           <footer class="no-print">AcademyFlow <span>•</span> Secure academy workspace</footer>
         </div>
       </main>
@@ -121,6 +147,7 @@ const PLATFORM_NAV: NavItem[] = [
 export class ShellComponent {
   protected readonly auth = inject(AuthService);
   protected readonly notify = inject(Notify);
+  protected readonly years = inject(AcademicYearService);
   private readonly router = inject(Router);
 
   protected readonly billingPermission = Permission.BillingManage;
@@ -130,6 +157,12 @@ export class ShellComponent {
   protected currentPassword = '';
   protected newPassword = '';
   protected repeatPassword = '';
+
+  constructor() {
+    // Only an academy with access has year-based screens; the owner and a locked academy skip straight on.
+    if (this.auth.tenant() && this.auth.hasAccess()) void this.years.load();
+    else this.years.ready.set(true);
+  }
 
   protected readonly userInitials = computed(() => initials(this.auth.user()?.name));
 
@@ -170,6 +203,7 @@ export class ShellComponent {
 
   protected async signOut(): Promise<void> {
     await this.auth.logout();
+    this.years.reset();
     await this.router.navigateByUrl('/login');
   }
 }

@@ -144,10 +144,12 @@ export class StatusComponent {
       case 'Active':
       case 'Posted':
       case 'Sent':
+      case 'Current':
         return 'good';
       case 'Partial':
       case 'Trialing':
       case 'Open':
+      case 'Upcoming':
         return 'info';
       case 'Voided':
       case 'Void':

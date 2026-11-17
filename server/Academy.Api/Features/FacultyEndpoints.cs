@@ -92,9 +92,9 @@ public static class FacultyEndpoints
         }, ct);
     }
 
-    private static async Task<IResult> ListPayouts([AsParameters] PayoutListQuery query, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> ListPayouts([AsParameters] PayoutListQuery query, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var payouts = db.FacultyPayouts.AsNoTracking();
+        var payouts = db.FacultyPayouts.AsNoTracking().Between(await years.GetAsync(ct), p => p.PaidOn);
         if (query.FacultyId is { } facultyId) payouts = payouts.Where(p => p.FacultyId == facultyId);
         if (query.From is { } from) payouts = payouts.Where(p => p.PaidOn >= from);
         if (query.To is { } to) payouts = payouts.Where(p => p.PaidOn <= to);

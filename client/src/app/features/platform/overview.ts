@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, Notify, errorMessage } from '../../core/api';
-import { PlatformSummary } from '../../core/models';
+import { EmailStatus, PlatformSummary } from '../../core/models';
 import { UI } from '../../shared/ui';
 
 @Component({
@@ -32,6 +32,36 @@ import { UI } from '../../shared/ui';
         <article class="stat white"><div class="stat-top">ACADEMIES</div><div class="stat-value">{{ s.totalTenants }}</div><small>{{ s.activeTenants }} active · {{ s.suspendedTenants }} suspended</small></article>
       </div>
 
+      @if (email(); as e) {
+        <section class="surface">
+          <div class="surface-title">
+            <h2>Email</h2>
+            <app-status [value]="e.configured ? 'Active' : 'Inactive'" />
+          </div>
+          @if (e.configured) {
+            <p class="muted">Sending through {{ e.host }} as {{ e.fromAddress }}. {{ e.sent }} sent · {{ e.pending }} waiting · {{ e.failed }} failed.</p>
+          } @else {
+            <p class="muted">
+              Email is not set up, so nothing is being delivered: password-reset links, welcome emails, fee reminders and invoices
+              are only written to the server log. Add the Email__ settings on the server (see README) and restart.
+            </p>
+          }
+          @for (problem of e.recentProblems; track problem.createdAtUtc) {
+            <div class="alert"><span><strong>{{ problem.category }}</strong> to {{ problem.toAddress }} ({{ problem.attempts }} attempts): {{ problem.lastError }}</span></div>
+          }
+          <div class="filter-bar">
+            <input type="email" placeholder="Send a test email to…" [(ngModel)]="testTo" />
+            <button type="button" class="secondary" [disabled]="testing()" (click)="sendTest()">{{ testing() ? 'Sending…' : 'Send test email' }}</button>
+          </div>
+          @if (testResult()) {
+            <div class="success" role="status">{{ testResult() }}</div>
+          }
+          @if (testError()) {
+            <div class="alert" role="alert">{{ testError() }}</div>
+          }
+        </section>
+      }
+
       <section class="surface">
         <div class="surface-title"><h2>How billing runs</h2></div>
         <p class="muted">
@@ -54,12 +84,34 @@ export class PlatformOverviewComponent {
   protected readonly summary = signal<PlatformSummary | null>(null);
   protected readonly error = signal('');
   protected readonly running = signal(false);
+  protected readonly email = signal<EmailStatus | null>(null);
+  protected readonly testing = signal(false);
+  protected readonly testResult = signal('');
+  protected readonly testError = signal('');
+  protected testTo = '';
 
   constructor() {
     this.load();
   }
 
+  protected sendTest(): void {
+    this.testing.set(true);
+    this.testResult.set('');
+    this.testError.set('');
+    this.api.post('platform/email/test', { to: this.testTo }).subscribe({
+      next: () => {
+        this.testing.set(false);
+        this.testResult.set(`Test email sent to ${this.testTo}. Check that inbox (and the spam folder).`);
+      },
+      error: e => {
+        this.testing.set(false);
+        this.testError.set(errorMessage(e));
+      },
+    });
+  }
+
   private load(): void {
+    this.api.get<EmailStatus>('platform/email').subscribe({ next: e => this.email.set(e), error: e => this.error.set(errorMessage(e)) });
     this.api.get<PlatformSummary>('platform/summary').subscribe({ next: s => this.summary.set(s), error: e => this.error.set(errorMessage(e)) });
   }
 

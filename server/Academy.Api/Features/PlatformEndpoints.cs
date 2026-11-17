@@ -252,7 +252,8 @@ public static partial class PlatformEndpoints
         };
         sessions.SetPassword(user, admin.Password!);
 
-        db.AddRange(tenant, subscription, user);
+        // Academies start their year in different months; the Super Admin can adjust these dates.
+        db.AddRange(tenant, subscription, user, AcademicYear.DefaultFor(tenant.Id, today));
         var (subject, body) = EmailTemplates.Welcome(user.DisplayName, tenant.Name, tenant.Code, user.Email,
             AuthEndpoints.PublicBaseUrl(appOptions.Value, http));
         email.Enqueue(tenant.Id, user.Email, subject, body, "Welcome");
