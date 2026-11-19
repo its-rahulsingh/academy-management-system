@@ -23,6 +23,10 @@ export class Api {
   put<T = unknown>(path: string, body: unknown = {}): Observable<T> {
     return this.http.put<T>(`/api/${path}`, body);
   }
+
+  delete<T = unknown>(path: string): Observable<T> {
+    return this.http.delete<T>(`/api/${path}`);
+  }
 }
 
 function toParams(query: Record<string, QueryValue>): HttpParams {

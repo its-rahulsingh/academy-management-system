@@ -143,6 +143,111 @@ namespace Academy.Api.Data.Migrations
                     b.ToTable("academy_tests", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.AdmissionApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("address");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("GuardianName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("guardian_name");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(800)
+                        .HasColumnType("character varying(800)")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("ReviewNote")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_admission_applications");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_admission_applications_course_id");
+
+                    b.HasIndex("StudentId")
+                        .HasDatabaseName("ix_admission_applications_student_id");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAtUtc")
+                        .HasDatabaseName("ix_admission_applications_tenant_id_status_created_at_utc");
+
+                    b.ToTable("admission_applications", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -561,6 +666,17 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("full_name");
 
+                    b.Property<decimal>("HourlyRate")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("hourly_rate");
+
+                    b.Property<string>("PayType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("pay_type");
+
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -664,6 +780,92 @@ namespace Academy.Api.Data.Migrations
                         .HasDatabaseName("ix_faculty_payouts_tenant_id_paid_on");
 
                     b.ToTable("faculty_payouts", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultySession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("FacultyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("faculty_id");
+
+                    b.Property<decimal>("HourlyRate")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("hourly_rate");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("minutes");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateOnly>("TaughtOn")
+                        .HasColumnType("date")
+                        .HasColumnName("taught_on");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Topic")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("topic");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("void_reason");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("voided_at_utc");
+
+                    b.Property<Guid?>("VoidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voided_by_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_faculty_sessions");
+
+                    b.HasIndex("FacultyId")
+                        .HasDatabaseName("ix_faculty_sessions_faculty_id");
+
+                    b.HasIndex("TenantId", "FacultyId")
+                        .HasDatabaseName("ix_faculty_sessions_tenant_id_faculty_id");
+
+                    b.HasIndex("TenantId", "TaughtOn")
+                        .HasDatabaseName("ix_faculty_sessions_tenant_id_taught_on");
+
+                    b.ToTable("faculty_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_faculty_sessions_minutes", "minutes > 0 and minutes <= 1440");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.FeeAdjustment", b =>
@@ -1227,6 +1429,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AdmissionsOpen")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admissions_open");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1257,6 +1463,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnName("created_at_utc")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<int?>("LogoVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("logo_version");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -1277,6 +1487,12 @@ namespace Academy.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("suspension_reason");
+
+                    b.Property<string>("Tagline")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("tagline");
 
                     b.HasKey("Id")
                         .HasName("pk_tenants");
@@ -1307,6 +1523,36 @@ namespace Academy.Api.Data.Migrations
                         .HasName("pk_tenant_counters");
 
                     b.ToTable("tenant_counters", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.TenantLogo", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("content_type");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("data");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_tenant_logos");
+
+                    b.ToTable("tenant_logos", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_logos_size", "octet_length(data) <= 204800");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.TestResult", b =>
@@ -1394,6 +1640,31 @@ namespace Academy.Api.Data.Migrations
                     b.Navigation("Course");
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.AdmissionApplication", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_admission_applications_courses_course_id");
+
+                    b.HasOne("Academy.Api.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_admission_applications_students_student_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_admission_applications_tenants_tenant_id");
+
+                    b.Navigation("Course");
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AppUser", b =>
                 {
                     b.HasOne("Academy.Api.Domain.Tenant", null)
@@ -1448,6 +1719,25 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_faculty_payouts_tenants_tenant_id");
+
+                    b.Navigation("Faculty");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultySession", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_sessions_faculty_faculty_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_sessions_tenants_tenant_id");
 
                     b.Navigation("Faculty");
                 });
@@ -1576,6 +1866,16 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_tenant_counters_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.TenantLogo", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tenant_logos_tenants_tenant_id");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.TestResult", b =>

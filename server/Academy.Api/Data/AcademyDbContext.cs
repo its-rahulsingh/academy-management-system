@@ -23,6 +23,7 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SubscriptionInvoice> SubscriptionInvoices => Set<SubscriptionInvoice>();
+    public DbSet<TenantLogo> TenantLogos => Set<TenantLogo>();
 
     // Identity
     public DbSet<AppUser> Users => Set<AppUser>();
@@ -36,6 +37,8 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     public DbSet<StudentPayment> StudentPayments => Set<StudentPayment>();
     public DbSet<FeeAdjustment> FeeAdjustments => Set<FeeAdjustment>();
     public DbSet<FacultyPayout> FacultyPayouts => Set<FacultyPayout>();
+    public DbSet<FacultySession> FacultySessions => Set<FacultySession>();
+    public DbSet<AdmissionApplication> AdmissionApplications => Set<AdmissionApplication>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<AcademyTest> Tests => Set<AcademyTest>();
     public DbSet<TestResult> TestResults => Set<TestResult>();
@@ -132,7 +135,7 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     }
 
     private static readonly HashSet<Type> NotAudited =
-        [typeof(AuditLog), typeof(EmailMessage), typeof(PasswordResetToken), typeof(TenantCounter), typeof(Batch)];
+        [typeof(AuditLog), typeof(EmailMessage), typeof(PasswordResetToken), typeof(TenantCounter), typeof(Batch), typeof(TenantLogo)];
 
     /// <summary>Bookkeeping columns whose changes are noise in an audit trail.</summary>
     private static readonly HashSet<string> SkippedProperties =

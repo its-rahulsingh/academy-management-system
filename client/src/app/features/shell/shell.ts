@@ -17,6 +17,7 @@ interface NavItem {
 const ACADEMY_NAV: NavItem[] = [
   { label: 'Dashboard', icon: '▦', link: '/app/dashboard' },
   { label: 'Students', icon: '♙', link: '/app/students', permission: Permission.StudentsRead },
+  { label: 'Admissions', icon: '✎', link: '/app/admissions', permission: Permission.AdmissionsManage },
   { label: 'Courses', icon: '▤', link: '/app/courses', permission: Permission.CoursesRead },
   { label: 'Faculty', icon: '♧', link: '/app/faculty', permission: Permission.FacultyRead },
   { label: 'Payments', icon: '▣', link: '/app/payments', permission: Permission.PaymentsRead },
@@ -26,6 +27,7 @@ const ACADEMY_NAV: NavItem[] = [
   { label: 'Users', icon: '⚙', link: '/app/users', permission: Permission.UsersManage },
   { label: 'Activity log', icon: '☰', link: '/app/audit', permission: Permission.AuditRead },
   { label: 'Academic years', icon: '◷', link: '/app/academic-years', permission: Permission.YearsManage },
+  { label: 'Academy profile', icon: '◎', link: '/app/profile', permission: Permission.BrandingManage },
 ];
 
 const BILLING_NAV: NavItem = { label: 'Subscription', icon: '◈', link: '/app/billing', permission: Permission.BillingManage };
@@ -46,10 +48,14 @@ const PLATFORM_NAV: NavItem[] = [
     <div class="shell">
       <aside class="sidebar no-print">
         <div class="side-brand">
-          <span class="brand-mark">A</span>
+          <app-brand-mark [name]="auth.tenant()?.name ?? 'AcademyFlow'" [logoUrl]="auth.tenant()?.logoUrl ?? null" />
           <div>
             <strong>{{ auth.tenant()?.name ?? 'AcademyFlow' }}</strong>
-            <small>{{ auth.isOwner() ? 'Platform console' : 'Academy workspace' }}</small>
+            @if (auth.isOwner()) {
+              <small>Platform console</small>
+            } @else if (auth.tenant()?.tagline) {
+              <small>{{ auth.tenant()?.tagline }}</small>
+            }
           </div>
         </div>
         <div class="sidebar-caption">{{ auth.isOwner() ? 'PLATFORM' : 'WORKSPACE' }}</div>
@@ -75,7 +81,7 @@ const PLATFORM_NAV: NavItem[] = [
 
       <main class="main">
         <header class="mobile-top no-print">
-          <span class="brand-mark">A</span><strong>{{ auth.tenant()?.name ?? 'AcademyFlow' }}</strong>
+          <app-brand-mark [name]="auth.tenant()?.name ?? 'AcademyFlow'" [logoUrl]="auth.tenant()?.logoUrl ?? null" /><strong>{{ auth.tenant()?.name ?? 'AcademyFlow' }}</strong>
           <button type="button" (click)="signOut()">Sign out</button>
         </header>
         <div class="page">

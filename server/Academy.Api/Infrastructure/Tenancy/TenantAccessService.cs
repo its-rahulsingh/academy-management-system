@@ -28,7 +28,9 @@ public sealed record TenantAccess(
     DateOnly? PeriodEnd,
     bool InGrace,
     int? MaxStudents,
-    int? MaxUsers);
+    int? MaxUsers,
+    string Tagline,
+    int? LogoVersion);
 
 public static class TenantAccessRules
 {
@@ -74,6 +76,8 @@ public sealed class TenantAccessService(AcademyDbContext db, IMemoryCache cache,
                 t.Name,
                 t.Code,
                 t.Status,
+                t.Tagline,
+                t.LogoVersion,
                 Subscription = db.Subscriptions
                     .Where(s => s.TenantId == t.Id)
                     .Select(s => new { s.Status, s.CurrentPeriodEnd, PlanName = s.Plan.Name, s.Plan.MaxStudents, s.Plan.MaxUsers })
@@ -93,7 +97,8 @@ public sealed class TenantAccessService(AcademyDbContext db, IMemoryCache cache,
             : row.Subscription.Status.ToString();
 
         return new TenantAccess(allowed, status, reason, row.Name, row.Code, row.Subscription?.PlanName,
-            row.Subscription?.CurrentPeriodEnd, inGrace, row.Subscription?.MaxStudents, row.Subscription?.MaxUsers);
+            row.Subscription?.CurrentPeriodEnd, inGrace, row.Subscription?.MaxStudents, row.Subscription?.MaxUsers,
+            row.Tagline, row.LogoVersion);
     }
 
     private static string CacheKey(Guid tenantId) => $"tenant-access:{tenantId}";

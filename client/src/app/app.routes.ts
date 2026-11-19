@@ -12,6 +12,8 @@ export const routes: Routes = [
   { path: 'forgot-password', loadComponent: () => import('./features/public/auth-pages').then(m => m.ForgotPasswordComponent) },
   { path: 'reset-password', loadComponent: () => import('./features/public/auth-pages').then(m => m.ResetPasswordComponent) },
   { path: 'locked', loadComponent: () => import('./features/public/auth-pages').then(m => m.LockedComponent) },
+  // Public admission form, reached by link or QR code. Open to everyone, signed in or not.
+  { path: 'apply/:code', loadComponent: () => import('./features/public/apply').then(m => m.ApplyComponent) },
   {
     path: 'app',
     canActivate: [academyOnly],
@@ -20,6 +22,8 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', canActivate: [requires()], loadComponent: () => import('./features/academy/dashboard').then(m => m.DashboardComponent) },
       { path: 'students', canActivate: [requires(Permission.StudentsRead)], loadComponent: () => import('./features/academy/students').then(m => m.StudentsComponent) },
+      { path: 'admissions', canActivate: [requires(Permission.AdmissionsManage)], loadComponent: () => import('./features/academy/admissions').then(m => m.AdmissionsComponent) },
+      { path: 'profile', canActivate: [requires(Permission.BrandingManage)], loadComponent: () => import('./features/academy/branding').then(m => m.BrandingPageComponent) },
       { path: 'courses', canActivate: [requires(Permission.CoursesRead)], loadComponent: () => import('./features/academy/courses').then(m => m.CoursesComponent) },
       { path: 'faculty', canActivate: [requires(Permission.FacultyRead)], loadComponent: () => import('./features/academy/faculty').then(m => m.FacultyComponent) },
       { path: 'payments', canActivate: [requires(Permission.PaymentsRead)], loadComponent: () => import('./features/academy/payments').then(m => m.PaymentsComponent) },

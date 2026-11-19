@@ -22,7 +22,7 @@ public static class AuthEndpoints
     public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
     public sealed record SessionUser(Guid Id, string Name, string Email, string Role);
-    public sealed record SessionTenant(Guid Id, string Code, string Name);
+    public sealed record SessionTenant(Guid Id, string Code, string Name, string Tagline, string? LogoUrl);
     public sealed record SessionAccess(bool Allowed, string Status, string? Reason, string? PlanName, DateOnly? PeriodEnd, bool InGrace);
     public sealed record SessionResponse(
         bool Authenticated,
@@ -62,7 +62,8 @@ public static class AuthEndpoints
         SessionAccess? sessionAccess = null;
         if (user.TenantId is { } tenantId && await access.GetAsync(tenantId, ct) is { } state)
         {
-            tenant = new SessionTenant(tenantId, state.TenantCode, state.TenantName);
+            tenant = new SessionTenant(tenantId, state.TenantCode, state.TenantName, state.Tagline,
+                BrandingEndpoints.LogoUrl(tenantId, state.LogoVersion));
             sessionAccess = new SessionAccess(state.Allowed, state.Status, state.Reason, state.PlanName, state.PeriodEnd, state.InGrace);
         }
 

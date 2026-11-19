@@ -72,6 +72,47 @@ internal sealed class FacultyConfiguration : IEntityTypeConfiguration<Faculty>
         e.Property(x => x.Phone).HasMaxLength(Columns.Phone);
         e.Property(x => x.Specialization).HasMaxLength(Columns.Name);
         e.Property(x => x.AgreedPayout).IsMoney();
+        e.Property(x => x.PayType).IsEnumText();
+        e.Property(x => x.HourlyRate).IsMoney();
+    }
+}
+
+internal sealed class FacultySessionConfiguration : IEntityTypeConfiguration<FacultySession>
+{
+    public void Configure(EntityTypeBuilder<FacultySession> e)
+    {
+        e.ToTable("faculty_sessions");
+        e.HasCreatedAt();
+        e.HasLedgerColumns();
+        e.HasIndex(x => new { x.TenantId, x.FacultyId });
+        e.HasIndex(x => new { x.TenantId, x.TaughtOn });
+        e.Property(x => x.HourlyRate).IsMoney();
+        e.Property(x => x.Amount).IsMoney();
+        e.Property(x => x.Topic).HasMaxLength(200);
+        e.ToTable(t => t.HasCheckConstraint("ck_faculty_sessions_minutes", $"minutes > 0 and minutes <= {FacultySession.MaxMinutes}"));
+        e.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class AdmissionApplicationConfiguration : IEntityTypeConfiguration<AdmissionApplication>
+{
+    public void Configure(EntityTypeBuilder<AdmissionApplication> e)
+    {
+        e.ToTable("admission_applications");
+        e.HasCreatedAt();
+        // The review queue lists one status at a time, newest first.
+        e.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAtUtc });
+        e.Property(x => x.FullName).HasMaxLength(Columns.Name);
+        e.Property(x => x.Email).HasMaxLength(Columns.Email);
+        e.Property(x => x.Phone).HasMaxLength(Columns.Phone);
+        e.Property(x => x.GuardianName).HasMaxLength(Columns.Name);
+        e.Property(x => x.Address).HasMaxLength(400);
+        e.Property(x => x.Message).HasMaxLength(800);
+        e.Property(x => x.Status).IsEnumText();
+        e.Property(x => x.ReviewNote).HasMaxLength(500);
+        e.Property(x => x.IpAddress).HasMaxLength(45);
+        e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne<Student>().WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

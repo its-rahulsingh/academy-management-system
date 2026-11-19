@@ -12,11 +12,11 @@ Stack: Angular 21 · ASP.NET Core 10 · PostgreSQL · one Docker container (Rend
 
 | Role | Belongs to | Can do |
 |---|---|---|
-| Owner | Platform | Create/suspend academies, plans, subscriptions, invoices. Has no access to academy data screens. |
-| Super Admin | One academy | Everything in the academy, including the subscription and other Super Admins. |
-| Admin | One academy | Everything except the subscription. Cannot manage Super Admins. |
-| Accountant | One academy | Fees, refunds, discounts, expenses, payouts, reports. |
-| Staff | One academy | Students, fee collection, test marks. Sees no expenses, payouts or totals. |
+| Owner | Platform | Create/suspend academies, plans, subscriptions, invoices, each academy's logo and tagline. Has no access to academy data screens. |
+| Super Admin | One academy | Everything in the academy, including the subscription, academic years, logo/tagline and other Super Admins. |
+| Admin | One academy | Everything except the subscription, academic years and logo/tagline. Cannot manage Super Admins. |
+| Accountant | One academy | Fees, refunds, discounts, expenses, payouts, faculty teaching time, reports. |
+| Staff | One academy | Students, online admissions, fee collection, test marks. Sees no expenses, payouts or totals. |
 
 Endpoints require a *permission*; roles map to permissions in `server/Academy.Api/Infrastructure/Auth/Permissions.cs`.
 
@@ -24,9 +24,31 @@ Endpoints require a *permission*; roles map to permissions in `server/Academy.Ap
 
 Students and courses · fee payments with numbered, printable receipts · discounts, surcharges and refunds ·
 faculty and payouts · expenses · tests and report cards · dashboard · reports with CSV export ·
-email fee reminders · user management · activity log.
+email fee reminders · user management · activity log · online admission form with QR code · own logo and tagline.
 
 Money entries are never edited or deleted. A mistake is **voided** with a reason and re-entered, so totals always reconcile.
+
+### Academy logo and tagline
+
+The Super Admin (**Academy profile**) or the owner (academy page in the console) uploads a logo and sets a tagline.
+The logo appears beside the academy name for every user, on the browser tab, on the sign-in page once the academy code
+is typed, and on the admission form. Images are resized in the browser and stored in the database (Render's disk is not
+persistent); only PNG, JPEG and WebP are accepted, checked from the file's own bytes.
+
+### Online admissions
+
+**Admissions** shows the academy's public form link (`/apply/<academy code>`) and a QR code to print or download.
+Anyone can apply without signing in; applications wait in a queue until staff **approve** them (choosing course, fee and
+date — the student is created in the selected academic year) or **reject** them with a reason. The form can be closed at
+any time. Spam protection: per-IP rate limit, a hidden honeypot field, duplicate check by phone and course, and a cap
+of 1,000 pending applications per academy.
+
+### Faculty pay: package or hourly
+
+Each faculty member is paid either a **package** (fixed amount, e.g. annual) or **hourly**. For hourly faculty, staff log
+each class as whole **minutes** (e.g. 85 min); pay = minutes × hourly rate ÷ 60, rounded to the paisa. The rate is copied
+onto each logged session, so changing it later never re-prices past classes. Owed = earned − paid for both kinds, and
+payouts cannot exceed it. A logged session that has already been paid for cannot be voided until the payout is voided.
 
 ## Academic years
 
@@ -37,7 +59,8 @@ passed it is locked. A switch at the top of every screen selects the year; the c
 | Follows the selected year | Not tied to a year |
 |---|---|
 | Students (by the year they were admitted) and their fee status | Courses (catalogue; counts shown are for the selected year) |
-| Payments, refunds, expenses, faculty payouts (by date) | Faculty records and agreed payouts |
+| Payments, refunds, expenses, faculty payouts and teaching time (by date) | Faculty records, packages and hourly rates, what faculty are owed |
+| | Online admission applications (approved ones join the selected year) |
 | Tests and report cards | Users, activity log, subscription |
 | Dashboard and reports | |
 

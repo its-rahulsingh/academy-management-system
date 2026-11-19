@@ -55,12 +55,17 @@ public static class Permissions
     public const string BillingManage = "billing.manage";
     /// <summary>Add academic years and change the dates of the current and future ones.</summary>
     public const string YearsManage = "years.manage";
+    /// <summary>Change how the academy presents itself: logo and tagline.</summary>
+    public const string BrandingManage = "branding.manage";
+    /// <summary>Review applications from the public admission form and open or close the form.</summary>
+    public const string AdmissionsManage = "admissions.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
         DashboardFinance, StudentsRead, StudentsWrite, CoursesRead, CoursesWrite, FacultyRead, FacultyWrite,
         PaymentsRead, PaymentsWrite, LedgerCorrect, PayoutsRead, PayoutsWrite, ExpensesRead, ExpensesWrite,
-        TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage, YearsManage
+        TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage, YearsManage,
+        BrandingManage, AdmissionsManage
     ];
 }
 
@@ -69,7 +74,7 @@ public static class RolePermissions
     private static readonly FrozenDictionary<string, FrozenSet<string>> Map = new Dictionary<string, FrozenSet<string>>
     {
         [Roles.SuperAdmin] = Permissions.All.ToFrozenSet(),
-        [Roles.Admin] = Permissions.All.Except([Permissions.BillingManage, Permissions.YearsManage]).ToFrozenSet(),
+        [Roles.Admin] = Permissions.All.Except([Permissions.BillingManage, Permissions.YearsManage, Permissions.BrandingManage]).ToFrozenSet(),
         [Roles.Accountant] = new[]
         {
             Permissions.DashboardFinance, Permissions.StudentsRead, Permissions.CoursesRead, Permissions.FacultyRead,
@@ -81,7 +86,7 @@ public static class RolePermissions
         [Roles.Staff] = new[]
         {
             Permissions.StudentsRead, Permissions.StudentsWrite, Permissions.CoursesRead, Permissions.PaymentsRead,
-            Permissions.PaymentsWrite, Permissions.TestsRead, Permissions.TestsWrite
+            Permissions.PaymentsWrite, Permissions.TestsRead, Permissions.TestsWrite, Permissions.AdmissionsManage
         }.ToFrozenSet()
     }.ToFrozenDictionary();
 

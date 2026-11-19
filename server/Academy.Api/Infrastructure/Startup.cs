@@ -88,12 +88,17 @@ public static class Startup
         });
 
         var authPermits = configuration.GetValue("RateLimiting:AuthPermitsPerMinute", 10);
+        // Pages anyone can open without signing in (admission form, academy logo lookup).
+        var publicPermits = configuration.GetValue("RateLimiting:PublicPermitsPerMinute", 30);
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy(AuthEndpoints.RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = authPermits, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy(BrandingEndpoints.PublicRateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = publicPermits, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
     }
 
@@ -135,8 +140,11 @@ public static class Startup
 
         app.MapAuthEndpoints();
         app.MapPlatformEndpoints();
+        app.MapPlatformBrandingEndpoints();
         app.MapEmailAdminEndpoints();
         app.MapBillingEndpoints();
+        app.MapPublicBrandingEndpoints();
+        app.MapPublicAdmissionEndpoints();
 
         // Everything an academy does with its own data sits behind one gate: signed in, belongs to an
         // academy, and that academy's subscription is in good standing.
@@ -145,6 +153,8 @@ public static class Startup
         academy.MapDashboardEndpoints();
         academy.MapCourseEndpoints();
         academy.MapStudentEndpoints();
+        academy.MapAdmissionEndpoints();
+        academy.MapBrandingEndpoints();
         academy.MapPaymentEndpoints();
         academy.MapFacultyEndpoints();
         academy.MapExpenseEndpoints();

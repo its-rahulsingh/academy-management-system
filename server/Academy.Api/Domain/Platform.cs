@@ -18,6 +18,30 @@ public sealed class Tenant : Entity
     public string ContactPhone { get; set; } = "";
     public DateTime? SuspendedAtUtc { get; set; }
     public string? SuspensionReason { get; set; }
+
+    /// <summary>Short line shown under the academy name, e.g. "Excellence in coaching". Empty shows nothing.</summary>
+    public string Tagline { get; set; } = "";
+    /// <summary>
+    /// Null when the academy has no logo. Otherwise bumped on every change and put in the logo URL,
+    /// so browsers can cache the image indefinitely and still pick up a new one at once.
+    /// </summary>
+    public int? LogoVersion { get; set; }
+    /// <summary>Whether the public admission form accepts applications.</summary>
+    public bool AdmissionsOpen { get; set; } = true;
+}
+
+/// <summary>
+/// An academy's logo, kept in the database because the app's disk is not persistent on the host.
+/// A table of its own so the image bytes are never read along with ordinary tenant lookups.
+/// </summary>
+public sealed class TenantLogo : ITenantOwned
+{
+    public const int MaxBytes = 200 * 1024;
+
+    public Guid TenantId { get; set; }
+    public string ContentType { get; set; } = "";
+    public byte[] Data { get; set; } = [];
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
 public enum BillingInterval

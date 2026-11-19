@@ -3,12 +3,13 @@ import { RouterLink } from '@angular/router';
 import { Api, FormState, Notify, errorMessage } from '../../core/api';
 import { AppUser, Invoice, PAYMENT_METHODS, Plan, SubscriptionStatus, TenantDetail } from '../../core/models';
 import { UI } from '../../shared/ui';
+import { BrandingEditorComponent } from '../academy/branding';
 
 type Dialog = 'details' | 'subscription' | 'superAdmin' | 'password' | 'markPaid' | null;
 
 @Component({
   selector: 'app-academy-detail',
-  imports: [RouterLink, UI],
+  imports: [RouterLink, UI, BrandingEditorComponent],
   template: `
     @if (error()) {
       <div class="alert" role="alert">{{ error() }}</div>
@@ -78,6 +79,11 @@ type Dialog = 'details' | 'subscription' | 'superAdmin' | 'password' | 'markPaid
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section class="surface">
+        <div class="surface-title"><h2>Logo and tagline</h2></div>
+        <app-branding-editor [endpoint]="'platform/tenants/' + t.id + '/branding'" />
       </section>
 
       <section class="surface">

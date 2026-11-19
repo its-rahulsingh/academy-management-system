@@ -37,6 +37,18 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         e.Property(x => x.ContactEmail).HasMaxLength(Columns.Email);
         e.Property(x => x.ContactPhone).HasMaxLength(Columns.Phone);
         e.Property(x => x.SuspensionReason).HasMaxLength(500);
+        e.Property(x => x.Tagline).HasMaxLength(120);
+    }
+}
+
+internal sealed class TenantLogoConfiguration : IEntityTypeConfiguration<TenantLogo>
+{
+    public void Configure(EntityTypeBuilder<TenantLogo> e)
+    {
+        e.ToTable("tenant_logos");
+        e.HasKey(x => x.TenantId);
+        e.Property(x => x.ContentType).HasMaxLength(40);
+        e.ToTable(t => t.HasCheckConstraint("ck_tenant_logos_size", $"octet_length(data) <= {TenantLogo.MaxBytes}"));
     }
 }
 

@@ -3,12 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Api, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
+import { PublicAcademy } from '../../core/models';
+import { BrandMarkComponent } from '../../shared/ui';
 
 const MIN_PASSWORD = 12;
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, BrandMarkComponent],
   template: `
     <div class="login-page">
       <div class="login-intro">
@@ -18,13 +20,24 @@ const MIN_PASSWORD = 12;
       </div>
       <form class="login-card" (ngSubmit)="submit()">
         <div class="mobile-logo"><span class="brand-mark">A</span> AcademyFlow</div>
+        @if (academy(); as a) {
+          <div class="login-academy">
+            <app-brand-mark [name]="a.name" [logoUrl]="a.logoUrl" />
+            <div>
+              <strong>{{ a.name }}</strong>
+              @if (a.tagline) {
+                <small>{{ a.tagline }}</small>
+              }
+            </div>
+          </div>
+        }
         <h2>Welcome back</h2>
         <p>Sign in with the details your academy administrator gave you.</p>
         @if (error()) {
           <div class="alert" role="alert">{{ error() }}</div>
         }
         <label for="code">Academy code</label>
-        <input id="code" name="code" [(ngModel)]="academyCode" placeholder="e.g. brightminds" autocomplete="organization" autocapitalize="none" />
+        <input id="code" name="code" [(ngModel)]="academyCode" (blur)="lookUpAcademy()" placeholder="e.g. brightminds" autocomplete="organization" autocapitalize="none" />
         <div class="helper">Platform administrators leave this blank.</div>
         <label for="email">Email address</label>
         <input id="email" name="email" type="email" [(ngModel)]="email" placeholder="name@academy.com" autocomplete="username" required />
@@ -39,12 +52,35 @@ const MIN_PASSWORD = 12;
 export class LoginComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly api = inject(Api);
 
   protected academyCode = this.auth.rememberedAcademyCode();
   protected email = '';
   protected password = '';
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+  /** The academy the typed code belongs to, so staff see their own logo before signing in. */
+  protected readonly academy = signal<PublicAcademy | null>(null);
+  private lookedUp = '';
+
+  constructor() {
+    this.lookUpAcademy();
+  }
+
+  protected lookUpAcademy(): void {
+    const code = this.academyCode.trim().toLowerCase();
+    if (code === this.lookedUp) return;
+    this.lookedUp = code;
+    if (!code) {
+      this.academy.set(null);
+      return;
+    }
+    this.api.get<PublicAcademy>(`public/academies/${encodeURIComponent(code)}`).subscribe({
+      next: a => this.academy.set(this.lookedUp === code ? a : this.academy()),
+      // An unknown code is reported when signing in; here it just shows no academy.
+      error: () => this.academy.set(null),
+    });
+  }
 
   protected async submit(): Promise<void> {
     if (!this.email.trim() || !this.password) {

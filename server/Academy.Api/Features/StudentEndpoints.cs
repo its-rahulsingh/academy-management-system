@@ -128,17 +128,11 @@ public static class StudentEndpoints
     {
         if (ValidateStudent(request) is { } error) return ApiResults.Bad(error);
         var year = await years.GetAsync(ct);
-        if (year is null) return ApiResults.Bad("Set up an academic year before admitting students.");
-        if (year.IsClosed) return ApiResults.Bad($"Academic year {year.Name} has ended. Switch to the current year to admit students.");
-        if (!await db.Courses.AnyAsync(c => c.Id == request.CourseId && c.Active, ct)) return ApiResults.Bad("Select an active course.");
-
-        var limits = await access.GetAsync(currentUser.TenantId!.Value, ct);
-        if (limits?.MaxStudents is { } max && await db.Students.CountAsync(s => s.Active, ct) >= max)
-            return ApiResults.Bad($"Your plan allows {max} active students. Upgrade the plan to admit more.");
+        if (await CannotAdmitAsync(db, access, currentUser, year, request.CourseId, ct) is { } refusal) return ApiResults.Bad(refusal);
 
         var student = new Student
         {
-            AcademicYearId = year.Id,
+            AcademicYearId = year!.Id,
             FullName = request.FullName!.Trim(),
             Email = Validate.Text(request.Email, 240).ToLowerInvariant(),
             Phone = Validate.Text(request.Phone, 32),
@@ -150,6 +144,23 @@ public static class StudentEndpoints
         db.Students.Add(student);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/students/{student.Id}", new { student.Id });
+    }
+
+    /// <summary>
+    /// Rules every admission follows, whether typed in by staff or approved from the online form.
+    /// Returns why the student cannot be admitted, or null when they can.
+    /// </summary>
+    internal static async Task<string?> CannotAdmitAsync(
+        AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, YearRange? year, Guid courseId, CancellationToken ct)
+    {
+        if (year is null) return "Set up an academic year before admitting students.";
+        if (year.IsClosed) return $"Academic year {year.Name} has ended. Switch to the current year to admit students.";
+        if (!await db.Courses.AnyAsync(c => c.Id == courseId && c.Active, ct)) return "Select an active course.";
+
+        var limits = await access.GetAsync(currentUser.TenantId!.Value, ct);
+        if (limits?.MaxStudents is { } max && await db.Students.CountAsync(s => s.Active, ct) >= max)
+            return $"Your plan allows {max} active students. Upgrade the plan to admit more.";
+        return null;
     }
 
     private static async Task<IResult> Update(Guid id, StudentRequest request, AcademyDbContext db, CancellationToken ct)

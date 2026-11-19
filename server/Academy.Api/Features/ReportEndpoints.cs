@@ -69,7 +69,7 @@ public static class DashboardEndpoints
 
         var courses = await db.CourseFinancesAsync(year?.Id, ct);
         // Faculty agreements are not tied to a year, so what is still owed to faculty is an all-time figure.
-        var agreed = await db.Faculty.SumAsync(f => (decimal?)f.AgreedPayout, ct) ?? 0;
+        var agreed = await FacultyEndpoints.TotalEarnedAsync(db, ct);
         var paidOutEver = await db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
         var paidOut = await db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0;

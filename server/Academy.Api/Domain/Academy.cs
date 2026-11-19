@@ -53,14 +53,86 @@ public sealed class Student : TenantEntity
     public bool Active { get; set; } = true;
 }
 
+/// <summary>A student's application from the public admission form, waiting for the academy to approve or reject it.</summary>
+public sealed class AdmissionApplication : TenantEntity
+{
+    public string FullName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public Guid CourseId { get; set; }
+    public Course Course { get; set; } = null!;
+    public string GuardianName { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string Message { get; set; } = "";
+    public AdmissionStatus Status { get; set; } = AdmissionStatus.Pending;
+    /// <summary>The student created when the application was approved.</summary>
+    public Guid? StudentId { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTime? ReviewedAtUtc { get; set; }
+    /// <summary>Why it was rejected; shown to staff only.</summary>
+    public string ReviewNote { get; set; } = "";
+    public string? IpAddress { get; set; }
+
+    /// <summary>What the student record keeps of the fields the student table has no columns for.</summary>
+    public string RemarksForStudent()
+    {
+        var parts = new List<string> { "Applied online" };
+        if (GuardianName.Length > 0) parts.Add($"Guardian: {GuardianName}");
+        if (Address.Length > 0) parts.Add($"Address: {Address}");
+        if (Message.Length > 0) parts.Add($"Note: {Message}");
+        return string.Join(". ", parts);
+    }
+}
+
+public enum AdmissionStatus
+{
+    Pending,
+    Approved,
+    Rejected
+}
+
+public enum FacultyPayType
+{
+    /// <summary>A fixed amount agreed for the engagement (annual package or contract).</summary>
+    Package,
+    /// <summary>Paid for time taught: each logged session earns minutes × hourly rate.</summary>
+    Hourly
+}
+
 public sealed class Faculty : TenantEntity
 {
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
     public string Specialization { get; set; } = "";
+    public FacultyPayType PayType { get; set; } = FacultyPayType.Package;
+    /// <summary>The package amount. Used when <see cref="PayType"/> is Package.</summary>
     public decimal AgreedPayout { get; set; }
+    /// <summary>Rate for one hour of teaching. Used when <see cref="PayType"/> is Hourly; copied onto each session.</summary>
+    public decimal HourlyRate { get; set; }
     public bool Active { get; set; } = true;
+}
+
+/// <summary>
+/// Time an hourly faculty member taught. Time is kept in whole minutes, as academies record it ("85 min").
+/// The rate is copied from the faculty member, so a later rate change does not re-price past sessions.
+/// A ledger row: mistakes are voided, not edited.
+/// </summary>
+public sealed class FacultySession : LedgerEntry
+{
+    public const int MaxMinutes = 24 * 60;
+
+    public Guid FacultyId { get; set; }
+    public Faculty Faculty { get; set; } = null!;
+    public DateOnly TaughtOn { get; set; }
+    public int Minutes { get; set; }
+    public decimal HourlyRate { get; set; }
+    public decimal Amount { get; set; }
+    public string Topic { get; set; } = "";
+
+    /// <summary>Pay for a session, to the paisa.</summary>
+    public static decimal AmountFor(int minutes, decimal hourlyRate) =>
+        decimal.Round(minutes * hourlyRate / 60m, 2, MidpointRounding.AwayFromZero);
 }
 
 public enum PaymentKind

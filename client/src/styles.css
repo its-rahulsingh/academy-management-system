@@ -351,3 +351,68 @@ tr.editing-row td { background: #f6f5ff; }
 .legend .key.student { background: #6255ed; margin-left: 0; }
 .legend .key.class { background: #e8e6fb; border: 1px solid #d5d1f7; }
 @media print { .trend-student, .trend-class, .legend .key { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* ---- Academy logo ---- */
+img.brand-logo { object-fit: contain; background: white; border: 1px solid #ecedf4; padding: 2px; }
+.login-academy { display: flex; align-items: center; gap: 11px; padding: 12px 14px; margin-bottom: 22px; background: #f7f6ff; border: 1px solid #ecebfb; border-radius: 10px; }
+.login-academy .brand-mark { height: 40px; width: 40px; }
+.login-academy strong { font-size: 14px; display: block; }
+.login-academy small { font-size: 11px; color: #8a91a4; }
+.branding-editor { display: grid; gap: 18px; max-width: 560px; }
+.branding-editor label { margin-top: 0; }
+.branding-preview { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border: 1px dashed #dcdcef; border-radius: 10px; background: #fbfbfe; }
+.branding-preview strong { font-size: 14px; display: block; }
+.branding-preview small { font-size: 10px; color: #9ba2b6; }
+.file-button { display: inline-flex; align-items: center; margin: 0; cursor: pointer; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.file-button:focus-within { box-shadow: 0 0 0 3px #5b4bec33; }
+
+/* ---- Faculty pay ---- */
+.choice-group { border: 0; padding: 0; margin: 15px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choice-group legend { font-size: 12px; font-weight: 700; color: #42465f; margin-bottom: 7px; padding: 0; }
+label.choice { display: flex; gap: 9px; align-items: flex-start; margin: 0; padding: 11px 12px; border: 1px solid #e3e5ee; border-radius: 8px; cursor: pointer; font-weight: 600; }
+label.choice:has(input:checked) { border-color: #5447de; background: #f5f3ff; }
+label.choice input { width: auto; margin-top: 2px; }
+label.choice small { display: block; font-size: 10px; color: #8a91a4; font-weight: 500; margin-top: 3px; }
+.input-suffix { position: relative; }
+.input-suffix input { padding-right: 46px; }
+.input-suffix span { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #8a91a4; pointer-events: none; }
+.helper.calc { font-size: 12px; background: #f5f3ff; color: #4a40b8; padding: 10px 12px; border-radius: 7px; }
+
+/* ---- Online admissions ---- */
+.share-card { display: flex; gap: 22px; align-items: center; }
+.share-qr img { display: block; width: 168px; height: 168px; border: 1px solid #ecedf4; border-radius: 10px; }
+.share-body { flex: 1; min-width: 0; }
+.share-body h2 { font-size: 14px; margin: 0; }
+.link-box { display: flex; gap: 8px; margin-bottom: 10px; }
+.link-box input { font-size: 12px; padding: 9px 11px; }
+.link-box button { white-space: nowrap; flex-shrink: 0; }
+.button-link { text-decoration: none; display: inline-flex; align-items: center; }
+.toggle-line { margin-top: 14px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #eceef5; margin-bottom: 6px; overflow-x: auto; overflow-y: hidden; }
+.tabs button { padding: 10px 14px; font-size: 12px; font-weight: 700; color: #7b8193; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs button.active { color: #5147df; border-bottom-color: #5147df; }
+.tabs .count { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 4px; border-radius: 9px; background: #f0f0f7; font-size: 10px; text-align: center; }
+.tabs button.active .count { background: #ecebff; }
+.details-cell small { max-width: 280px; white-space: normal; }
+
+/* ---- Public admission form ---- */
+.apply-page { min-height: 100vh; background: #f7f8fc; padding: 32px 16px; display: flex; flex-direction: column; align-items: center; }
+.apply-card { width: 100%; max-width: 560px; background: white; border: 1px solid #eff0f7; border-radius: 14px; padding: 28px 26px; box-shadow: 0 24px 90px #242d4610; }
+.apply-header { display: flex; align-items: center; gap: 13px; padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid #f0f1f6; }
+.apply-header .brand-mark { height: 52px; width: 52px; font-size: 24px; border-radius: 12px; }
+.apply-header h1 { font-size: 20px; margin: 0; letter-spacing: -.03em; }
+.apply-header p { font-size: 12px; color: #8a91a4; margin: 4px 0 0; }
+.apply-card h2 { font-size: 17px; margin: 0 0 4px; }
+.apply-card .primary.wide { margin-top: 22px; padding: 14px; }
+.apply-done { flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13px; line-height: 1.5; }
+.apply-foot { font-size: 10px; color: #a9afc0; margin-top: 16px; }
+.hp-field { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+@media (max-width: 640px) {
+  .share-card { flex-direction: column; align-items: stretch; }
+  .share-qr { align-self: center; }
+  .choice-group { grid-template-columns: 1fr; }
+  .apply-page { padding: 16px; }
+  .apply-card { padding: 22px 16px; }
+  .apply-card input, .apply-card select, .apply-card textarea { font-size: 16px; }
+}

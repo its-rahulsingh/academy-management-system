@@ -14,7 +14,7 @@ export interface Session {
   authenticated: boolean;
   user: { id: string; name: string; email: string; role: Role } | null;
   permissions: string[];
-  tenant: { id: string; code: string; name: string } | null;
+  tenant: { id: string; code: string; name: string; tagline: string; logoUrl: string | null } | null;
   access: {
     allowed: boolean;
     status: string;
@@ -59,7 +59,63 @@ export const Permission = {
   AuditRead: 'audit.read',
   BillingManage: 'billing.manage',
   YearsManage: 'years.manage',
+  BrandingManage: 'branding.manage',
+  AdmissionsManage: 'admissions.manage',
 } as const;
+
+// ---- Branding and admissions ----
+
+export interface Branding {
+  id: string;
+  code: string;
+  name: string;
+  tagline: string;
+  logoUrl: string | null;
+}
+
+export interface PublicAcademy {
+  name: string;
+  tagline: string;
+  logoUrl: string | null;
+}
+
+export interface AdmissionForm {
+  academy: PublicAcademy;
+  open: boolean;
+  courses: { id: string; name: string; fee: number }[];
+}
+
+export type AdmissionStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface AdmissionApplication {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  courseId: string;
+  courseName: string;
+  courseFee: number;
+  courseActive: boolean;
+  guardianName: string;
+  address: string;
+  message: string;
+  status: AdmissionStatus;
+  studentId: string | null;
+  reviewNote: string;
+  reviewedAtUtc: string | null;
+  createdAtUtc: string;
+}
+
+export interface AdmissionQueue {
+  counts: Record<AdmissionStatus, number>;
+  page: Paged<AdmissionApplication>;
+}
+
+export interface AdmissionSettings {
+  code: string;
+  open: boolean;
+  path: string;
+}
 
 export const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Card', 'Cheque'] as const;
 
@@ -177,15 +233,37 @@ export interface PaymentSummary {
   count: number;
 }
 
+export type FacultyPayType = 'Package' | 'Hourly';
+
 export interface Faculty {
   id: string;
   fullName: string;
   email: string;
   phone: string;
   specialization: string;
+  payType: FacultyPayType;
+  /** Package amount; meaningful for package faculty. */
   agreedPayout: number;
+  /** Rate per hour; meaningful for hourly faculty. */
+  hourlyRate: number;
   active: boolean;
+  minutesTaught: number;
+  /** Package amount, or the total of logged sessions for hourly faculty. */
+  earned: number;
   paid: number;
+}
+
+export interface FacultySession {
+  id: string;
+  facultyId: string;
+  facultyName: string;
+  taughtOn: string;
+  minutes: number;
+  hourlyRate: number;
+  amount: number;
+  topic: string;
+  status: LedgerStatus;
+  voidReason: string | null;
 }
 
 export interface Payout {

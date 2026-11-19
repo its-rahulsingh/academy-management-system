@@ -1,4 +1,4 @@
-import { Component, Pipe, PipeTransform, computed, input, output, signal } from '@angular/core';
+import { Component, Pipe, PipeTransform, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -145,6 +145,7 @@ export class StatusComponent {
       case 'Posted':
       case 'Sent':
       case 'Current':
+      case 'Approved':
         return 'good';
       case 'Partial':
       case 'Trialing':
@@ -158,6 +159,7 @@ export class StatusComponent {
       case 'Expired':
       case 'Inactive':
       case 'Disabled':
+      case 'Rejected':
         return 'bad';
       default:
         return 'warn';
@@ -165,5 +167,65 @@ export class StatusComponent {
   });
 }
 
+/** An academy's logo, or its first letter on the brand colour when it has none. */
+@Component({
+  selector: 'app-brand-mark',
+  template: `
+    @if (logoUrl() && !failed()) {
+      <img class="brand-mark brand-logo" [src]="logoUrl()" [alt]="name() + ' logo'" (error)="failed.set(true)" />
+    } @else {
+      <span class="brand-mark" aria-hidden="true">{{ letter() }}</span>
+    }
+  `,
+})
+export class BrandMarkComponent {
+  readonly name = input('AcademyFlow');
+  readonly logoUrl = input<string | null>(null);
+  protected readonly failed = signal(false);
+  protected readonly letter = computed(() => (this.name().trim()[0] ?? 'A').toUpperCase());
+
+  constructor() {
+    // A new logo gets a fresh chance to load even if the previous one failed.
+    effect(() => {
+      this.logoUrl();
+      this.failed.set(false);
+    });
+  }
+}
+
+/** Largest side, in pixels, a logo is scaled down to before upload. Plenty for a sidebar and a browser tab. */
+const LOGO_SIZE = 256;
+
+/**
+ * Reads a picked image and returns it as a small PNG data URL, scaled to fit {@link LOGO_SIZE}.
+ * Resizing in the browser keeps uploads tiny whatever size the original photo was.
+ */
+export function readLogo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp|gif|bmp)$/.test(file.type)) {
+      reject(new Error('Choose a PNG, JPEG or WebP image.'));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, LOGO_SIZE / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('That file could not be read as an image.'));
+    };
+    image.src = url;
+  });
+}
+
 /** Everything a typical screen's template needs, so components import one list. */
-export const UI = [FormsModule, MoneyPipe, DayPipe, ModalComponent, ReasonDialogComponent, PagerComponent, StatusComponent] as const;
+export const UI = [
+  FormsModule, MoneyPipe, DayPipe, ModalComponent, ReasonDialogComponent, PagerComponent, StatusComponent, BrandMarkComponent,
+] as const;

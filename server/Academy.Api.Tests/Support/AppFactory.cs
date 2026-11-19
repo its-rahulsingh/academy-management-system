@@ -35,6 +35,7 @@ public sealed class AppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("OWNER_PASSWORD", Password);
         builder.UseSetting("BackgroundJobs:Enabled", "false");
         builder.UseSetting("RateLimiting:AuthPermitsPerMinute", "100000");
+        builder.UseSetting("RateLimiting:PublicPermitsPerMinute", "100000");
     }
 
     public async Task InitializeAsync()
