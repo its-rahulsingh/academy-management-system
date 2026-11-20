@@ -32,6 +32,9 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     // Academy
     public DbSet<AcademicYear> AcademicYears => Set<AcademicYear>();
     public DbSet<Course> Courses => Set<Course>();
+    public DbSet<Subject> Subjects => Set<Subject>();
+    public DbSet<CourseSubject> CourseSubjects => Set<CourseSubject>();
+    public DbSet<FacultySubject> FacultySubjects => Set<FacultySubject>();
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Faculty> Faculty => Set<Faculty>();
     public DbSet<StudentPayment> StudentPayments => Set<StudentPayment>();
@@ -162,12 +165,23 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
                 UserName = currentUser.UserName,
                 Action = ActionName(entry),
                 EntityType = entry.Metadata.ClrType.Name,
-                EntityId = string.Join(",", entry.Metadata.FindPrimaryKey()!.Properties.Select(p => entry.Property(p.Name).CurrentValue)),
+                EntityId = AuditEntityId(entry),
                 Changes = JsonSerializer.Serialize(changes),
                 IpAddress = currentUser.IpAddress
             });
         }
         AuditLogs.AddRange(logs);
+    }
+
+    /// <summary>
+    /// The row's key as text. In a composite key (a link such as course ↔ subject) the tenant part is left out:
+    /// the log row already records the tenant, and two ids fit the column where three would not.
+    /// </summary>
+    private static string AuditEntityId(EntityEntry entry)
+    {
+        var key = entry.Metadata.FindPrimaryKey()!.Properties;
+        var parts = key.Count > 1 ? key.Where(p => p.Name != nameof(ITenantOwned.TenantId)) : key;
+        return string.Join(",", parts.Select(p => entry.Property(p.Name).CurrentValue));
     }
 
     private static string ActionName(EntityEntry entry) => entry.State switch

@@ -189,18 +189,20 @@ public sealed class LedgerTests(AppFactory factory)
     public async Task Report_card_shows_test_history_with_class_average_and_rank()
     {
         var academy = await factory.NewAcademyAsync();
-        var courseId = await academy.NewCourseAsync("Science");
+        var physicsId = await academy.NewSubjectAsync("Physics");
+        var mathsId = await academy.NewSubjectAsync("Maths");
+        var courseId = await academy.NewCourseWithSubjectsAsync("Science", physicsId, mathsId);
         var asha = await academy.NewStudentAsync(courseId, name: "Asha");
         var kabir = await academy.NewStudentAsync(courseId, name: "Kabir");
         var zoya = await academy.NewStudentAsync(courseId, name: "Zoya");
 
-        async Task<Guid> NewTestAsync(string title, string subject, string date, int maxMarks) =>
-            (await (await academy.Admin.PostAsJsonAsync("/api/tests", new { title, subject, courseId, maxMarks, testDate = date })).ReadJsonAsync())["id"]!.GetValue<Guid>();
+        async Task<Guid> NewTestAsync(string title, Guid subjectId, string date, int maxMarks) =>
+            (await (await academy.Admin.PostAsJsonAsync("/api/tests", new { title, subjectId, courseId, maxMarks, testDate = date })).ReadJsonAsync())["id"]!.GetValue<Guid>();
         Task Mark(Guid test, Guid student, decimal marks) =>
             academy.Admin.PutAsJsonAsync($"/api/tests/{test}/results/{student}", new { marks, remarks = "" });
 
-        var physics = await NewTestAsync("Physics 1", "Physics", "2026-07-01", 50);
-        var maths = await NewTestAsync("Maths 1", "Maths", "2026-08-01", 100);
+        var physics = await NewTestAsync("Physics 1", physicsId, "2026-07-01", 50);
+        var maths = await NewTestAsync("Maths 1", mathsId, "2026-08-01", 100);
         await Mark(physics, asha, 40);
         await Mark(physics, kabir, 45);
         await Mark(physics, zoya, 20);

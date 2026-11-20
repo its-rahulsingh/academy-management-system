@@ -43,6 +43,19 @@ date — the student is created in the selected academic year) or **reject** the
 any time. Spam protection: per-IP rate limit, a hidden honeypot field, duplicate check by phone and course, and a cap
 of 1,000 pending applications per academy.
 
+### Subject master
+
+**Subjects** holds the subjects the academy teaches (name, optional short code, active/inactive). Courses list the
+subjects they teach and faculty list the subjects they teach (both picked by tick boxes). A test is set in one of its
+course's subjects, chosen from a dropdown, so report cards group results by real subjects. Rules: names are unique per
+academy ignoring case; a subject that has tests in a course stays linked to that course; inactive subjects cannot be
+newly linked but keep their history; renaming a subject renames it everywhere. Logged teaching time can record which of
+the faculty member's subjects the class was in.
+
+Upgrading from free-text subjects is automatic: the migration creates one subject per distinct typed name (ignoring
+case and spaces; the most used spelling wins), puts tests with no subject under "General", points each test at its
+subject and links each course to the subjects its tests were in.
+
 ### Faculty pay: package or hourly
 
 Each faculty member is paid either a **package** (fixed amount, e.g. annual) or **hourly**. For hourly faculty, staff log
@@ -58,7 +71,7 @@ passed it is locked. A switch at the top of every screen selects the year; the c
 
 | Follows the selected year | Not tied to a year |
 |---|---|
-| Students (by the year they were admitted) and their fee status | Courses (catalogue; counts shown are for the selected year) |
+| Students (by the year they were admitted) and their fee status | Courses (catalogue; counts shown are for the selected year) and subjects |
 | Payments, refunds, expenses, faculty payouts and teaching time (by date) | Faculty records, packages and hourly rates, what faculty are owed |
 | | Online admission applications (approved ones join the selected year) |
 | Tests and report cards | Users, activity log, subscription |

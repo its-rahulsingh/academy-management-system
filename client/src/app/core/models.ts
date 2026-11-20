@@ -137,11 +137,27 @@ export interface AcademicYearList {
   items: AcademicYear[];
 }
 
+/** A subject as it appears linked to a course or a faculty member. */
+export interface SubjectRef {
+  id: string;
+  name: string;
+  code: string;
+  active: boolean;
+}
+
+/** A row of the subject master, with how widely it is used. */
+export interface Subject extends SubjectRef {
+  courses: number;
+  faculty: number;
+  tests: number;
+}
+
 export interface Course {
   id: string;
   name: string;
   fee: number;
   active: boolean;
+  subjects: SubjectRef[];
   enrolled: number;
   collected: number;
 }
@@ -247,6 +263,7 @@ export interface Faculty {
   /** Rate per hour; meaningful for hourly faculty. */
   hourlyRate: number;
   active: boolean;
+  subjects: SubjectRef[];
   minutesTaught: number;
   /** Package amount, or the total of logged sessions for hourly faculty. */
   earned: number;
@@ -261,6 +278,8 @@ export interface FacultySession {
   minutes: number;
   hourlyRate: number;
   amount: number;
+  subjectId: string | null;
+  subjectName: string | null;
   topic: string;
   status: LedgerStatus;
   voidReason: string | null;
@@ -301,7 +320,8 @@ export interface ExpenseSummary {
 export interface AcademyTest {
   id: string;
   title: string;
-  subject: string;
+  subjectId: string;
+  subjectName: string;
   courseId: string;
   courseName: string;
   maxMarks: number;

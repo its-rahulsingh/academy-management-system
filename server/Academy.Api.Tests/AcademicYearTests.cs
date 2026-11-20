@@ -149,11 +149,12 @@ public sealed class AcademicYearTests(AppFactory factory)
     public async Task Money_and_tests_follow_their_dates_into_the_matching_year()
     {
         var academy = await factory.NewAcademyAsync();
-        var courseId = await academy.NewCourseAsync();
+        var subjectId = await academy.NewSubjectAsync("Physics");
+        var courseId = await academy.NewCourseWithSubjectsAsync("Foundation", subjectId);
         var studentId = await academy.NewStudentAsync(courseId, fee: 10000);
         await academy.PayAsync(studentId, 4000);
         await academy.Admin.PostAsJsonAsync("/api/expenses", new { title = "Rent", amount = 500, category = "Rent", method = "Cash" });
-        await academy.Admin.PostAsJsonAsync("/api/tests", new { title = "Unit 1", courseId, maxMarks = 50 });
+        await academy.Admin.PostAsJsonAsync("/api/tests", new { title = "Unit 1", subjectId, courseId, maxMarks = 50 });
         var nextYear = await AddNextYearAsync(academy);
 
         Assert.Equal(1, (await academy.Admin.GetJsonAsync("/api/payments"))["total"]!.GetValue<int>());

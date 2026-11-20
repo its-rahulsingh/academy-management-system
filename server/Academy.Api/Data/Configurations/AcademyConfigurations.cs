@@ -41,6 +41,43 @@ internal sealed class CourseConfiguration : IEntityTypeConfiguration<Course>
     }
 }
 
+internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
+{
+    public void Configure(EntityTypeBuilder<Subject> e)
+    {
+        e.ToTable("subjects");
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        e.Property(x => x.Name).HasMaxLength(Subject.MaxNameLength);
+        e.Property(x => x.Code).HasMaxLength(Subject.MaxCodeLength);
+    }
+}
+
+internal sealed class CourseSubjectConfiguration : IEntityTypeConfiguration<CourseSubject>
+{
+    public void Configure(EntityTypeBuilder<CourseSubject> e)
+    {
+        e.ToTable("course_subjects");
+        // The key leads with the course, which is how the link is read; the second index answers "which courses teach this subject".
+        e.HasKey(x => new { x.TenantId, x.CourseId, x.SubjectId });
+        e.HasIndex(x => new { x.TenantId, x.SubjectId });
+        e.HasOne<Course>().WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Cascade);
+        e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class FacultySubjectConfiguration : IEntityTypeConfiguration<FacultySubject>
+{
+    public void Configure(EntityTypeBuilder<FacultySubject> e)
+    {
+        e.ToTable("faculty_subjects");
+        e.HasKey(x => new { x.TenantId, x.FacultyId, x.SubjectId });
+        e.HasIndex(x => new { x.TenantId, x.SubjectId });
+        e.HasOne<Faculty>().WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Cascade);
+        e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class StudentConfiguration : IEntityTypeConfiguration<Student>
 {
     public void Configure(EntityTypeBuilder<Student> e)
@@ -89,6 +126,7 @@ internal sealed class FacultySessionConfiguration : IEntityTypeConfiguration<Fac
         e.Property(x => x.HourlyRate).IsMoney();
         e.Property(x => x.Amount).IsMoney();
         e.Property(x => x.Topic).HasMaxLength(200);
+        e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
         e.ToTable(t => t.HasCheckConstraint("ck_faculty_sessions_minutes", $"minutes > 0 and minutes <= {FacultySession.MaxMinutes}"));
         e.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -190,9 +228,10 @@ internal sealed class AcademyTestConfiguration : IEntityTypeConfiguration<Academ
         e.HasCreatedAt();
         e.HasIndex(x => new { x.TenantId, x.TestDate });
         e.HasIndex(x => new { x.TenantId, x.CourseId });
+        e.HasIndex(x => new { x.TenantId, x.SubjectId });
         e.Property(x => x.Title).HasMaxLength(180);
-        e.Property(x => x.Subject).HasMaxLength(100);
         e.Property(x => x.MaxMarks).HasPrecision(10, 2);
+        e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
         e.Property(x => x.Notes).HasMaxLength(Columns.Notes);
         e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
     }

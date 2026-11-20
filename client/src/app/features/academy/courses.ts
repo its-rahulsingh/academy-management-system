@@ -1,12 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Api, Notify, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { Course, Permission } from '../../core/models';
+import { Course, Permission, SubjectRef } from '../../core/models';
 import { UI } from '../../shared/ui';
+import { SubjectPickerComponent } from './subjects';
 
 @Component({
   selector: 'app-courses',
-  imports: [UI],
+  imports: [UI, SubjectPickerComponent],
   template: `
     <div class="page-header">
       <div>
@@ -37,6 +38,13 @@ import { UI } from '../../shared/ui';
             <app-status [value]="course.active ? 'Active' : 'Inactive'" />
           </div>
           <div class="course-number">{{ course.fee | money }}<small>COURSE FEE</small></div>
+          <div class="subject-tags">
+            @for (s of course.subjects; track s.id) {
+              <span class="subject-tag" [class.dimmed]="!s.active">{{ s.name }}</span>
+            } @empty {
+              <span class="helper">No subjects linked</span>
+            }
+          </div>
           <div class="course-bottom">
             <div><strong>{{ course.enrolled }}</strong><small>ENROLLED</small></div>
             <div><strong>{{ course.collected | money }}</strong><small>COLLECTED</small></div>
@@ -57,6 +65,9 @@ import { UI } from '../../shared/ui';
         <label for="fee">Course fee (₹) *</label>
         <input id="fee" type="number" min="0" step="0.01" [(ngModel)]="form.fee" />
         <div class="helper">Used as the default for new admissions. Students already admitted keep their agreed fee.</div>
+        <label>Subjects taught</label>
+        <app-subject-picker [subjects]="subjects()" [(selected)]="form.subjectIds" label="Subjects taught" />
+        <div class="helper">Tests for this course are set in one of these subjects. A subject that already has tests in this course stays linked.</div>
         @if (form.id) {
           <label class="check"><input type="checkbox" [(ngModel)]="form.active" /> Open for new admissions</label>
         }
@@ -75,7 +86,8 @@ export class CoursesComponent {
   protected readonly error = signal('');
   protected readonly activeCount = computed(() => this.courses().filter(c => c.active).length);
   protected readonly enrolled = computed(() => this.courses().reduce((sum, c) => sum + c.enrolled, 0));
-  protected form = { id: '', name: '', fee: 0, active: true };
+  protected readonly subjects = signal<SubjectRef[]>([]);
+  protected form = { id: '', name: '', fee: 0, active: true, subjectIds: [] as string[] };
 
   constructor() {
     this.load();
@@ -86,7 +98,11 @@ export class CoursesComponent {
   }
 
   protected open(course?: Course): void {
-    this.form = course ? { id: course.id, name: course.name, fee: course.fee, active: course.active } : { id: '', name: '', fee: 0, active: true };
+    // Fresh each time, so a subject added on the Subjects page a moment ago is offered.
+    this.api.get<SubjectRef[]>('subjects').subscribe({ next: s => this.subjects.set(s), error: e => this.error.set(errorMessage(e)) });
+    this.form = course
+      ? { id: course.id, name: course.name, fee: course.fee, active: course.active, subjectIds: course.subjects.map(s => s.id) }
+      : { id: '', name: '', fee: 0, active: true, subjectIds: [] };
     this.error.set('');
     this.editing.set(true);
   }

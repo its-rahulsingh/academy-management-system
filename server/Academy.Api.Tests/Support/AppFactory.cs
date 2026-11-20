@@ -117,6 +117,21 @@ public sealed record TestAcademy(AppFactory Factory, Guid Id, string Code, HttpC
         return (await response.ReadJsonAsync())["id"]!.GetValue<Guid>();
     }
 
+    public async Task<Guid> NewSubjectAsync(string name, string code = "")
+    {
+        var response = await Admin.PostAsJsonAsync("/api/subjects", new { name, code });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.ReadJsonAsync())["id"]!.GetValue<Guid>();
+    }
+
+    /// <summary>A course that teaches the given subjects.</summary>
+    public async Task<Guid> NewCourseWithSubjectsAsync(string name, params Guid[] subjectIds)
+    {
+        var response = await Admin.PostAsJsonAsync("/api/courses", new { name, fee = 10000, subjectIds });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.ReadJsonAsync())["id"]!.GetValue<Guid>();
+    }
+
     public async Task<Guid> NewStudentAsync(Guid courseId, decimal fee = 10000, string name = "Asha Rao", string email = "")
     {
         var response = await Admin.PostAsJsonAsync("/api/students", new { fullName = name, email, courseId, feeAmount = fee });

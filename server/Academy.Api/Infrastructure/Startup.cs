@@ -152,6 +152,7 @@ public static class Startup
         academy.MapAcademicYearEndpoints();
         academy.MapDashboardEndpoints();
         academy.MapCourseEndpoints();
+        academy.MapSubjectEndpoints();
         academy.MapStudentEndpoints();
         academy.MapAdmissionEndpoints();
         academy.MapBrandingEndpoints();

@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { AcademyTest, Course, Paged, Permission, ReportCard, StudentLookup, TestResult } from '../../core/models';
+import { AcademyTest, Course, Paged, Permission, ReportCard, StudentLookup, SubjectRef, TestResult } from '../../core/models';
 import { UI, today } from '../../shared/ui';
 
 @Component({
@@ -32,7 +32,7 @@ import { UI, today } from '../../shared/ui';
           <tbody>
             @for (t of tests.items(); track t.id) {
               <tr>
-                <td><strong>{{ t.title }}</strong><small>{{ t.subject || 'General' }}</small></td>
+                <td><strong>{{ t.title }}</strong><small>{{ t.subjectName }}</small></td>
                 <td>{{ t.courseName }}</td>
                 <td>{{ t.testDate | day }}</td>
                 <td>{{ t.maxMarks }}</td>
@@ -77,17 +77,30 @@ import { UI, today } from '../../shared/ui';
       <app-modal title="Add test" saveLabel="Create test" [busy]="form.busy()" [error]="form.error()" (closed)="form.close()" (saved)="saveTest()">
         <label for="title">Test title *</label>
         <input id="title" [(ngModel)]="model.title" maxlength="180" placeholder="e.g. Physics unit test 1" />
-        <div class="two-fields">
-          <div><label for="subject">Subject</label><input id="subject" [(ngModel)]="model.subject" maxlength="100" /></div>
-          <div><label for="max">Maximum marks *</label><input id="max" type="number" min="1" [(ngModel)]="model.maxMarks" /></div>
-        </div>
         <label for="course">Course *</label>
-        <select id="course" [(ngModel)]="model.courseId">
+        <select id="course" [(ngModel)]="model.courseId" (ngModelChange)="courseChanged()">
           <option value="" disabled>Select course</option>
           @for (c of courses(); track c.id) {
             <option [value]="c.id">{{ c.name }}</option>
           }
         </select>
+        <div class="two-fields">
+          <div>
+            <label for="subject">Subject *</label>
+            <select id="subject" [(ngModel)]="model.subjectId" [disabled]="!courseSubjects().length">
+              <option value="" disabled>{{ !model.courseId ? 'Select the course first' : courseSubjects().length ? 'Select subject' : 'No subjects linked' }}</option>
+              @for (s of courseSubjects(); track s.id) {
+                <option [value]="s.id">{{ s.name }}</option>
+              }
+            </select>
+          </div>
+          <div><label for="max">Maximum marks *</label><input id="max" type="number" min="1" [(ngModel)]="model.maxMarks" /></div>
+        </div>
+        @if (model.courseId && !courseSubjects().length) {
+          <p class="helper">This course has no subjects yet.
+            @if (canManageCourses) { <a routerLink="/app/courses">Link subjects on the Courses page →</a> } @else { Ask an administrator to link subjects to it. }
+          </p>
+        }
         <label for="date">Date</label>
         <input id="date" type="date" [(ngModel)]="model.testDate" />
         <label for="notes">Notes</label>
@@ -158,7 +171,11 @@ import { UI, today } from '../../shared/ui';
 export class TestsComponent {
   private readonly api = inject(Api);
   private readonly notify = inject(Notify);
-  protected readonly canEdit = inject(AuthService).can(Permission.TestsWrite);
+  private readonly auth = inject(AuthService);
+  protected readonly canEdit = this.auth.can(Permission.TestsWrite);
+  protected readonly canManageCourses = this.auth.can(Permission.CoursesWrite);
+  /** The selected course's active subjects: a test can only be set in one of them. */
+  protected readonly courseSubjects = signal<SubjectRef[]>([]);
 
   protected readonly error = signal('');
   protected readonly search = signal('');
@@ -207,17 +224,27 @@ export class TestsComponent {
   }
 
   private blank() {
-    return { title: '', subject: '', courseId: '', maxMarks: 100, testDate: today(), notes: '' };
+    return { title: '', subjectId: '', courseId: '', maxMarks: 100, testDate: today(), notes: '' };
   }
 
   protected openTest(): void {
     this.model = this.blank();
+    this.courseSubjects.set([]);
+    // Reload so subjects just linked on the Courses page are offered.
+    this.api.get<Course[]>('courses').subscribe({ next: c => this.courses.set(c), error: e => this.form.fail(errorMessage(e)) });
     this.form.show();
+  }
+
+  protected courseChanged(): void {
+    const subjects = this.courses().find(c => c.id === this.model.courseId)?.subjects.filter(s => s.active) ?? [];
+    this.courseSubjects.set(subjects);
+    this.model.subjectId = subjects.length === 1 ? subjects[0].id : '';
   }
 
   protected saveTest(): void {
     if (!this.model.title.trim()) return this.form.fail('Enter a test title.');
     if (!this.model.courseId) return this.form.fail('Select a course.');
+    if (!this.model.subjectId) return this.form.fail('Select the subject of the test.');
     this.form.submit(this.api.post('tests', this.model), () => {
       this.notify.success('Test created');
       this.tests.load();

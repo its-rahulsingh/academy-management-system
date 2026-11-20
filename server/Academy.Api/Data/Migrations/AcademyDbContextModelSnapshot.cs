@@ -108,11 +108,9 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(1200)")
                         .HasColumnName("notes");
 
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("subject");
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -134,8 +132,14 @@ namespace Academy.Api.Data.Migrations
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_academy_tests_course_id");
 
+                    b.HasIndex("SubjectId")
+                        .HasDatabaseName("ix_academy_tests_subject_id");
+
                     b.HasIndex("TenantId", "CourseId")
                         .HasDatabaseName("ix_academy_tests_tenant_id_course_id");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .HasDatabaseName("ix_academy_tests_tenant_id_subject_id");
 
                     b.HasIndex("TenantId", "TestDate")
                         .HasDatabaseName("ix_academy_tests_tenant_id_test_date");
@@ -466,6 +470,35 @@ namespace Academy.Api.Data.Migrations
                         .HasDatabaseName("ix_courses_tenant_id_name");
 
                     b.ToTable("courses", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.CourseSubject", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.HasKey("TenantId", "CourseId", "SubjectId")
+                        .HasName("pk_course_subjects");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_course_subjects_course_id");
+
+                    b.HasIndex("SubjectId")
+                        .HasDatabaseName("ix_course_subjects_subject_id");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .HasDatabaseName("ix_course_subjects_tenant_id_subject_id");
+
+                    b.ToTable("course_subjects", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.EmailMessage", b =>
@@ -823,6 +856,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
                     b.Property<DateOnly>("TaughtOn")
                         .HasColumnType("date")
                         .HasColumnName("taught_on");
@@ -856,6 +893,9 @@ namespace Academy.Api.Data.Migrations
                     b.HasIndex("FacultyId")
                         .HasDatabaseName("ix_faculty_sessions_faculty_id");
 
+                    b.HasIndex("SubjectId")
+                        .HasDatabaseName("ix_faculty_sessions_subject_id");
+
                     b.HasIndex("TenantId", "FacultyId")
                         .HasDatabaseName("ix_faculty_sessions_tenant_id_faculty_id");
 
@@ -866,6 +906,35 @@ namespace Academy.Api.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_faculty_sessions_minutes", "minutes > 0 and minutes <= 1440");
                         });
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultySubject", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("FacultyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("faculty_id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.HasKey("TenantId", "FacultyId", "SubjectId")
+                        .HasName("pk_faculty_subjects");
+
+                    b.HasIndex("FacultyId")
+                        .HasDatabaseName("ix_faculty_subjects_faculty_id");
+
+                    b.HasIndex("SubjectId")
+                        .HasDatabaseName("ix_faculty_subjects_subject_id");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .HasDatabaseName("ix_faculty_subjects_tenant_id_subject_id");
+
+                    b.ToTable("faculty_subjects", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.FeeAdjustment", b =>
@@ -1235,6 +1304,53 @@ namespace Academy.Api.Data.Migrations
                         .HasDatabaseName("ix_student_payments_tenant_id_student_id");
 
                     b.ToTable("student_payments", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.Subject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean")
+                        .HasColumnName("active");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subjects");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subjects_tenant_id_name");
+
+                    b.ToTable("subjects", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.Subscription", b =>
@@ -1630,6 +1746,13 @@ namespace Academy.Api.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_academy_tests_courses_course_id");
 
+                    b.HasOne("Academy.Api.Domain.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_academy_tests_subjects_subject_id");
+
                     b.HasOne("Academy.Api.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -1638,6 +1761,8 @@ namespace Academy.Api.Data.Migrations
                         .HasConstraintName("fk_academy_tests_tenants_tenant_id");
 
                     b.Navigation("Course");
+
+                    b.Navigation("Subject");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.AdmissionApplication", b =>
@@ -1682,6 +1807,32 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_courses_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.CourseSubject", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_course_subjects_courses_course_id");
+
+                    b.HasOne("Academy.Api.Domain.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_course_subjects_subjects_subject_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_course_subjects_tenants_tenant_id");
+
+                    b.Navigation("Subject");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.Expense", b =>
@@ -1732,6 +1883,12 @@ namespace Academy.Api.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_faculty_sessions_faculty_faculty_id");
 
+                    b.HasOne("Academy.Api.Domain.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_faculty_sessions_subjects_subject_id");
+
                     b.HasOne("Academy.Api.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -1740,6 +1897,34 @@ namespace Academy.Api.Data.Migrations
                         .HasConstraintName("fk_faculty_sessions_tenants_tenant_id");
 
                     b.Navigation("Faculty");
+
+                    b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultySubject", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_subjects_faculty_faculty_id");
+
+                    b.HasOne("Academy.Api.Domain.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_subjects_subjects_subject_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_subjects_tenants_tenant_id");
+
+                    b.Navigation("Subject");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.FeeAdjustment", b =>
@@ -1818,6 +2003,16 @@ namespace Academy.Api.Data.Migrations
                         .HasConstraintName("fk_student_payments_tenants_tenant_id");
 
                     b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.Subject", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_subjects_tenants_tenant_id");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.Subscription", b =>

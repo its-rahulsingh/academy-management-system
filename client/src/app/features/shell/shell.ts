@@ -19,6 +19,7 @@ const ACADEMY_NAV: NavItem[] = [
   { label: 'Students', icon: '♙', link: '/app/students', permission: Permission.StudentsRead },
   { label: 'Admissions', icon: '✎', link: '/app/admissions', permission: Permission.AdmissionsManage },
   { label: 'Courses', icon: '▤', link: '/app/courses', permission: Permission.CoursesRead },
+  { label: 'Subjects', icon: '❖', link: '/app/subjects', permission: Permission.CoursesRead },
   { label: 'Faculty', icon: '♧', link: '/app/faculty', permission: Permission.FacultyRead },
   { label: 'Payments', icon: '▣', link: '/app/payments', permission: Permission.PaymentsRead },
   { label: 'Expenses', icon: '▥', link: '/app/expenses', permission: Permission.ExpensesRead },

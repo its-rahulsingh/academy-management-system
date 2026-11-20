@@ -9,7 +9,8 @@ namespace Academy.Api.Features;
 
 public static class CourseEndpoints
 {
-    public sealed record CourseRequest(string? Name, decimal Fee, bool Active = true);
+    /// <summary><paramref name="SubjectIds"/> left out (null) keeps the course's current subjects.</summary>
+    public sealed record CourseRequest(string? Name, decimal Fee, bool Active = true, IReadOnlyList<Guid>? SubjectIds = null);
 
     public static void MapCourseEndpoints(this RouteGroupBuilder academy)
     {
@@ -28,6 +29,10 @@ public static class CourseEndpoints
             .Select(c => new
             {
                 c.Id, c.Name, c.Fee, c.Active,
+                Subjects = db.CourseSubjects.Where(l => l.CourseId == c.Id)
+                    .OrderBy(l => l.Subject.Name)
+                    .Select(l => new { l.Subject.Id, l.Subject.Name, l.Subject.Code, l.Subject.Active })
+                    .ToList(),
                 Enrolled = db.Students.Count(s => s.CourseId == c.Id && (yearId == null || s.AcademicYearId == yearId)),
                 Collected = (db.StudentPayments
                         .Where(p => p.Student.CourseId == c.Id && (yearId == null || p.Student.AcademicYearId == yearId)
@@ -50,6 +55,8 @@ public static class CourseEndpoints
 
         var course = new Course { Name = name, Fee = request.Fee, Active = request.Active };
         db.Courses.Add(course);
+        if (request.SubjectIds is { } subjectIds && await SubjectLinks.SetCourseSubjectsAsync(db, course.Id, subjectIds, ct) is { } linkError)
+            return ApiResults.Bad(linkError);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/courses/{course.Id}", new { course.Id });
     }
@@ -67,6 +74,8 @@ public static class CourseEndpoints
         course.Name = name;
         course.Fee = request.Fee;
         course.Active = request.Active;
+        if (request.SubjectIds is { } subjectIds && await SubjectLinks.SetCourseSubjectsAsync(db, id, subjectIds, ct) is { } linkError)
+            return ApiResults.Bad(linkError);
         await db.SaveChangesAsync(ct);
         return Results.Ok(new { course.Id });
     }

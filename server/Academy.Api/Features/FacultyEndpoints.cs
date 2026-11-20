@@ -16,9 +16,10 @@ public static class FacultyEndpoints
 {
     public sealed record FacultyRequest(
         string? FullName, string? Email, string? Phone, string? Specialization, decimal AgreedPayout,
-        FacultyPayType PayType = FacultyPayType.Package, decimal HourlyRate = 0, bool Active = true);
+        FacultyPayType PayType = FacultyPayType.Package, decimal HourlyRate = 0, bool Active = true,
+        IReadOnlyList<Guid>? SubjectIds = null);
     public sealed record PayoutRequest(Guid FacultyId, decimal Amount, string? Method, DateOnly? PaidOn, string? Notes);
-    public sealed record SessionRequest(Guid FacultyId, DateOnly? TaughtOn, int Minutes, string? Topic);
+    public sealed record SessionRequest(Guid FacultyId, DateOnly? TaughtOn, int Minutes, string? Topic, Guid? SubjectId = null);
     public sealed record VoidRequest(string? Reason);
 
     public sealed class PayoutListQuery : PageQuery
@@ -79,6 +80,10 @@ public static class FacultyEndpoints
             .Select(f => new
             {
                 f.Id, f.FullName, f.Email, f.Phone, f.Specialization, f.PayType, f.AgreedPayout, f.HourlyRate, f.Active,
+                Subjects = db.FacultySubjects.Where(l => l.FacultyId == f.Id)
+                    .OrderBy(l => l.Subject.Name)
+                    .Select(l => new { l.Subject.Id, l.Subject.Name, l.Subject.Code, l.Subject.Active })
+                    .ToList(),
                 MinutesTaught = db.FacultySessions.Where(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted).Sum(s => (int?)s.Minutes) ?? 0,
                 Earned = f.PayType == FacultyPayType.Package
                     ? f.AgreedPayout
@@ -118,6 +123,8 @@ public static class FacultyEndpoints
         var faculty = new Faculty();
         Apply(faculty, request);
         db.Faculty.Add(faculty);
+        if (request.SubjectIds is { } subjectIds && await SubjectLinks.SetFacultySubjectsAsync(db, faculty.Id, subjectIds, ct) is { } linkError)
+            return ApiResults.Bad(linkError);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/faculty/{faculty.Id}", new { faculty.Id });
     }
@@ -140,6 +147,8 @@ public static class FacultyEndpoints
                     ? $"The package cannot be lower than the {paid:0.00} already paid."
                     : $"Logged sessions come to {earned:0.00}, less than the {paid:0.00} already paid. Keep the package, or log the remaining hours first.");
             }
+            if (request.SubjectIds is { } subjectIds && await SubjectLinks.SetFacultySubjectsAsync(db, id, subjectIds, ct) is { } linkError)
+                return ApiResults.Bad(linkError);
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { faculty.Id });
@@ -212,6 +221,7 @@ public static class FacultyEndpoints
             .Select(s => new
             {
                 s.Id, s.FacultyId, FacultyName = s.Faculty.FullName, s.TaughtOn, s.Minutes, s.HourlyRate, s.Amount, s.Topic,
+                s.SubjectId, SubjectName = s.Subject != null ? s.Subject.Name : null,
                 s.Status, s.VoidReason
             })
             .ToPagedAsync(query, ct));
@@ -231,6 +241,9 @@ public static class FacultyEndpoints
             if (faculty.PayType != FacultyPayType.Hourly)
                 return ApiResults.Bad($"{faculty.FullName} is paid a package. Change them to hourly pay to log teaching time.");
             if (faculty.HourlyRate <= 0) return ApiResults.Bad($"Set an hourly rate for {faculty.FullName} first.");
+            if (request.SubjectId is { } subjectId
+                && !await db.FacultySubjects.AnyAsync(l => l.FacultyId == faculty.Id && l.SubjectId == subjectId, ct))
+                return ApiResults.Bad($"Pick one of the subjects {faculty.FullName} teaches.");
 
             var session = new FacultySession
             {
@@ -239,6 +252,7 @@ public static class FacultyEndpoints
                 Minutes = request.Minutes,
                 HourlyRate = faculty.HourlyRate,
                 Amount = FacultySession.AmountFor(request.Minutes, faculty.HourlyRate),
+                SubjectId = request.SubjectId,
                 Topic = Validate.Text(request.Topic, 200)
             };
             db.FacultySessions.Add(session);

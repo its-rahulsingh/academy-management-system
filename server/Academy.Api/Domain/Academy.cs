@@ -8,6 +8,40 @@ public sealed class Course : TenantEntity
 }
 
 /// <summary>
+/// An entry in the academy's subject master (Physics, Chemistry…). Courses list the subjects they teach,
+/// tests are set in one of their course's subjects, and faculty are linked to the subjects they teach.
+/// A subject in use is made inactive rather than deleted, so history keeps its name.
+/// </summary>
+public sealed class Subject : TenantEntity
+{
+    public const int MaxNameLength = 100;
+    public const int MaxCodeLength = 12;
+
+    public string Name { get; set; } = "";
+    /// <summary>Optional short form, e.g. "PHY".</summary>
+    public string Code { get; set; } = "";
+    public bool Active { get; set; } = true;
+}
+
+/// <summary>A subject taught in a course.</summary>
+public sealed class CourseSubject : ITenantOwned
+{
+    public Guid TenantId { get; set; }
+    public Guid CourseId { get; set; }
+    public Guid SubjectId { get; set; }
+    public Subject Subject { get; set; } = null!;
+}
+
+/// <summary>A subject a faculty member teaches.</summary>
+public sealed class FacultySubject : ITenantOwned
+{
+    public Guid TenantId { get; set; }
+    public Guid FacultyId { get; set; }
+    public Guid SubjectId { get; set; }
+    public Subject Subject { get; set; } = null!;
+}
+
+/// <summary>
 /// An academy's academic year. Each academy sets its own dates, because academies start their year in
 /// different months. A year whose end date has passed is closed and its dates can no longer change.
 /// </summary>
@@ -128,6 +162,9 @@ public sealed class FacultySession : LedgerEntry
     public int Minutes { get; set; }
     public decimal HourlyRate { get; set; }
     public decimal Amount { get; set; }
+    /// <summary>Optional: which of the faculty member's subjects the class was in.</summary>
+    public Guid? SubjectId { get; set; }
+    public Subject? Subject { get; set; }
     public string Topic { get; set; } = "";
 
     /// <summary>Pay for a session, to the paisa.</summary>
@@ -194,7 +231,9 @@ public sealed class Expense : LedgerEntry
 public sealed class AcademyTest : TenantEntity
 {
     public string Title { get; set; } = "";
-    public string Subject { get; set; } = "";
+    /// <summary>One of the course's subjects, from the subject master.</summary>
+    public Guid SubjectId { get; set; }
+    public Subject Subject { get; set; } = null!;
     public Guid CourseId { get; set; }
     public Course Course { get; set; } = null!;
     public decimal MaxMarks { get; set; }

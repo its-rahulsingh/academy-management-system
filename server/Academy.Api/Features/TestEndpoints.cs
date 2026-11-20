@@ -9,7 +9,7 @@ namespace Academy.Api.Features;
 
 public static class TestEndpoints
 {
-    public sealed record TestRequest(string? Title, string? Subject, Guid CourseId, decimal MaxMarks, DateOnly? TestDate, string? Notes);
+    public sealed record TestRequest(string? Title, Guid? SubjectId, Guid CourseId, decimal MaxMarks, DateOnly? TestDate, string? Notes);
     public sealed record ResultRequest(decimal Marks, string? Remarks);
 
     public sealed class TestListQuery : PageQuery
@@ -42,7 +42,7 @@ public static class TestEndpoints
             .OrderByDescending(t => t.TestDate).ThenByDescending(t => t.CreatedAtUtc)
             .Select(t => new
             {
-                t.Id, t.Title, t.Subject, t.CourseId, CourseName = t.Course.Name, t.MaxMarks, t.TestDate, t.Notes,
+                t.Id, t.Title, t.SubjectId, SubjectName = t.Subject.Name, t.CourseId, CourseName = t.Course.Name, t.MaxMarks, t.TestDate, t.Notes,
                 ResultCount = db.TestResults.Count(r => r.TestId == t.Id),
                 AverageMarks = db.TestResults.Where(r => r.TestId == t.Id).Average(r => (decimal?)r.Marks)
             })
@@ -104,7 +104,7 @@ public static class TestEndpoints
             {
                 r.TestId,
                 r.Test.Title,
-                r.Test.Subject,
+                Subject = r.Test.Subject.Name,
                 r.Test.TestDate,
                 r.Test.MaxMarks,
                 r.Marks,
@@ -119,7 +119,7 @@ public static class TestEndpoints
         {
             r.TestId,
             r.Title,
-            Subject = string.IsNullOrWhiteSpace(r.Subject) ? "General" : r.Subject,
+            r.Subject,
             r.TestDate,
             r.MaxMarks,
             r.Marks,
@@ -158,11 +158,15 @@ public static class TestEndpoints
         if (!Validate.Name(request.Title, 180)) return ApiResults.Bad("Enter a test title.");
         if (request.MaxMarks is <= 0 or > 100_000) return ApiResults.Bad("Enter positive maximum marks.");
         if (!await db.Courses.AnyAsync(c => c.Id == request.CourseId, ct)) return ApiResults.Bad("Course not found.");
+        if (request.SubjectId is not { } subjectId) return ApiResults.Bad("Select the subject of the test.");
+        // Only a subject the course teaches, so report cards group each course's tests by its own subjects.
+        if (!await db.CourseSubjects.AnyAsync(l => l.CourseId == request.CourseId && l.SubjectId == subjectId && l.Subject.Active, ct))
+            return ApiResults.Bad("Select one of the course's subjects. Link subjects to the course on the Courses page first.");
 
         var test = new AcademyTest
         {
             Title = request.Title!.Trim(),
-            Subject = Validate.Text(request.Subject, 100),
+            SubjectId = subjectId,
             CourseId = request.CourseId,
             MaxMarks = request.MaxMarks,
             TestDate = Validate.DateOrToday(request.TestDate),

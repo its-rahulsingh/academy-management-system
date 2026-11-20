@@ -1,8 +1,9 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { Faculty, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission } from '../../core/models';
+import { Faculty, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission, SubjectRef } from '../../core/models';
 import { UI, today } from '../../shared/ui';
+import { SubjectPickerComponent } from './subjects';
 
 /** Same rounding as the server: minutes × hourly rate ÷ 60, to the paisa. */
 function sessionPay(minutes: number, hourlyRate: number): number {
@@ -11,7 +12,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
 
 @Component({
   selector: 'app-faculty',
-  imports: [UI],
+  imports: [UI, SubjectPickerComponent],
   template: `
     <div class="page-header">
       <div>
@@ -49,7 +50,14 @@ function sessionPay(minutes: number, hourlyRate: number): number {
         <tbody>
           @for (f of faculty(); track f.id) {
             <tr [class.dimmed]="!f.active">
-              <td><strong>{{ f.fullName }}</strong><small>{{ f.specialization || f.phone || f.email || '—' }}</small></td>
+              <td>
+                <strong>{{ f.fullName }}</strong>
+                @if (f.subjects.length) {
+                  <small>{{ subjectNames(f) }}</small>
+                } @else {
+                  <small>{{ f.specialization || f.phone || f.email || '—' }}</small>
+                }
+              </td>
               <td>
                 @if (f.payType === 'Hourly') {
                   <strong>{{ f.hourlyRate | money }} / hour</strong><small>{{ f.minutesTaught }} min taught</small>
@@ -89,7 +97,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
             <tbody>
               @for (s of sessions.items(); track s.id) {
                 <tr [class.dimmed]="s.status === 'Voided'">
-                  <td><strong>{{ s.facultyName }}</strong><small>{{ s.status === 'Voided' ? 'Voided: ' + s.voidReason : s.topic }}</small></td>
+                  <td><strong>{{ s.facultyName }}</strong><small>{{ s.status === 'Voided' ? 'Voided: ' + s.voidReason : sessionLabel(s) }}</small></td>
                   <td>{{ s.taughtOn | day }}</td>
                   <td>{{ s.minutes }} min</td>
                   <td>{{ s.hourlyRate | money }} / hour</td>
@@ -149,8 +157,10 @@ function sessionPay(minutes: number, hourlyRate: number): number {
           <div><label for="email">Email</label><input id="email" type="email" [(ngModel)]="model.email" /></div>
           <div><label for="phone">Phone</label><input id="phone" [(ngModel)]="model.phone" maxlength="32" /></div>
         </div>
-        <label for="spec">Specialisation</label>
-        <input id="spec" [(ngModel)]="model.specialization" placeholder="e.g. Mathematics" maxlength="150" />
+        <label>Subjects taught</label>
+        <app-subject-picker [subjects]="subjects()" [(selected)]="model.subjectIds" label="Subjects taught" />
+        <label for="spec">Specialisation / notes</label>
+        <input id="spec" [(ngModel)]="model.specialization" placeholder="e.g. IIT-JEE mentor" maxlength="150" />
 
         <fieldset class="choice-group">
           <legend>How is this faculty member paid? *</legend>
@@ -190,6 +200,15 @@ function sessionPay(minutes: number, hourlyRate: number): number {
           </div>
           <div><label for="taughtOn">Date</label><input id="taughtOn" type="date" [(ngModel)]="sessionModel.taughtOn" /></div>
         </div>
+        @if (sessionFaculty()?.subjects?.length) {
+          <label for="sessionSubject">Subject</label>
+          <select id="sessionSubject" [(ngModel)]="sessionModel.subjectId">
+            <option value="">Not specified</option>
+            @for (s of sessionFaculty()!.subjects; track s.id) {
+              <option [value]="s.id">{{ s.name }}</option>
+            }
+          </select>
+        }
         <label for="topic">Class or topic</label>
         <input id="topic" [(ngModel)]="sessionModel.topic" maxlength="200" placeholder="e.g. Physics — Batch A" />
         @if (sessionFaculty(); as f) {
@@ -274,7 +293,8 @@ export class FacultyComponent {
   protected readonly payout = new FormState();
   protected payoutModel = { facultyId: '', amount: 0, method: 'Bank Transfer', paidOn: today(), notes: '' };
   protected readonly session = new FormState();
-  protected sessionModel = { facultyId: '', minutes: null as number | null, taughtOn: today(), topic: '' };
+  protected sessionModel = { facultyId: '', subjectId: '', minutes: null as number | null, taughtOn: today(), topic: '' };
+  protected readonly subjects = signal<SubjectRef[]>([]);
   protected readonly voidTarget = signal<Payout | null>(null);
   protected readonly voidSessionTarget = signal<FacultySession | null>(null);
   protected readonly voiding = new FormState();
@@ -298,15 +318,25 @@ export class FacultyComponent {
   private blank() {
     return {
       id: '', fullName: '', email: '', phone: '', specialization: '',
-      payType: 'Package' as FacultyPayType, agreedPayout: 0, hourlyRate: 0, active: true,
+      payType: 'Package' as FacultyPayType, agreedPayout: 0, hourlyRate: 0, active: true, subjectIds: [] as string[],
     };
   }
 
+  protected subjectNames(f: Faculty): string {
+    return f.subjects.map(s => s.name).join(', ');
+  }
+
+  protected sessionLabel(s: FacultySession): string {
+    return [s.subjectName, s.topic].filter(Boolean).join(' — ');
+  }
+
   protected openForm(f?: Faculty): void {
+    this.api.get<SubjectRef[]>('subjects').subscribe({ next: s => this.subjects.set(s), error: e => this.form.fail(errorMessage(e)) });
     this.model = f
       ? {
           id: f.id, fullName: f.fullName, email: f.email, phone: f.phone, specialization: f.specialization,
           payType: f.payType, agreedPayout: f.agreedPayout, hourlyRate: f.hourlyRate, active: f.active,
+          subjectIds: f.subjects.map(s => s.id),
         }
       : this.blank();
     this.form.show();
@@ -339,14 +369,19 @@ export class FacultyComponent {
   }
 
   protected openSession(f?: Faculty): void {
-    this.sessionModel = { facultyId: f?.id ?? (this.hourly().length === 1 ? this.hourly()[0].id : ''), minutes: null, taughtOn: today(), topic: '' };
+    const facultyId = f?.id ?? (this.hourly().length === 1 ? this.hourly()[0].id : '');
+    // Someone who teaches a single subject has it filled in.
+    const own = this.hourly().find(h => h.id === facultyId)?.subjects ?? [];
+    this.sessionModel = { facultyId, subjectId: own.length === 1 ? own[0].id : '', minutes: null, taughtOn: today(), topic: '' };
     this.session.show();
   }
 
   protected saveSession(): void {
     if (!this.sessionModel.facultyId) return this.session.fail('Select a faculty member.');
     if (!this.validMinutes()) return this.session.fail('Enter the time taught as whole minutes, e.g. 85.');
-    this.session.submit(this.api.post('faculty-sessions', { ...this.sessionModel, minutes: Number(this.sessionModel.minutes) }), () => {
+    const own = this.sessionFaculty()?.subjects ?? [];
+    const subjectId = own.some(s => s.id === this.sessionModel.subjectId) ? this.sessionModel.subjectId : null;
+    this.session.submit(this.api.post('faculty-sessions', { ...this.sessionModel, subjectId, minutes: Number(this.sessionModel.minutes) }), () => {
       this.notify.success(`${this.sessionModel.minutes} min logged`);
       this.load();
     });

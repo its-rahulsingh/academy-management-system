@@ -25,6 +25,7 @@ export const routes: Routes = [
       { path: 'admissions', canActivate: [requires(Permission.AdmissionsManage)], loadComponent: () => import('./features/academy/admissions').then(m => m.AdmissionsComponent) },
       { path: 'profile', canActivate: [requires(Permission.BrandingManage)], loadComponent: () => import('./features/academy/branding').then(m => m.BrandingPageComponent) },
       { path: 'courses', canActivate: [requires(Permission.CoursesRead)], loadComponent: () => import('./features/academy/courses').then(m => m.CoursesComponent) },
+      { path: 'subjects', canActivate: [requires(Permission.CoursesRead)], loadComponent: () => import('./features/academy/subjects').then(m => m.SubjectsComponent) },
       { path: 'faculty', canActivate: [requires(Permission.FacultyRead)], loadComponent: () => import('./features/academy/faculty').then(m => m.FacultyComponent) },
       { path: 'payments', canActivate: [requires(Permission.PaymentsRead)], loadComponent: () => import('./features/academy/payments').then(m => m.PaymentsComponent) },
       { path: 'payments/:id/receipt', canActivate: [requires(Permission.PaymentsRead)], loadComponent: () => import('./features/academy/receipt').then(m => m.ReceiptComponent) },
