@@ -151,7 +151,14 @@ public sealed class FeesAndPromotionTests(AppFactory factory)
         // The portal login followed the student into the new year.
         var portal = factory.NewBrowser();
         await portal.LoginAsync(academy.Code, email, "asha1");
-        Assert.Equal("Class 11", (await portal.GetJsonAsync("/api/me/student"))["student"]!["courseName"]!.GetValue<string>());
+        var now = await portal.GetJsonAsync("/api/me/student");
+        Assert.Equal("Class 11", now["student"]!["courseName"]!.GetValue<string>());
+        Assert.Equal(2, now["years"]!.AsArray().Count);
+
+        // Choosing last year in the portal shows last year's course and report card; the default is the new year only.
+        var lastYear = await portal.GetJsonAsync($"/api/me/student?yearId={thisYear["id"]}");
+        Assert.Equal("Class 10", lastYear["student"]!["courseName"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.OK, (await portal.GetAsync($"/api/me/student/report-card?yearId={thisYear["id"]}")).StatusCode);
     }
 
     [Fact]

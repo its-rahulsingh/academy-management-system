@@ -32,9 +32,30 @@ public static class StudentPortalEndpoints
     private static IResult NotLinked() =>
         ApiResults.Error(StatusCodes.Status403Forbidden, "This login is not linked to a student record. Ask the academy to check it.");
 
-    private static async Task<IResult> Overview(AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    /// <summary>
+    /// The student's record for the chosen academic year. A promoted student has one record per year; the login points
+    /// at the newest, and earlier ones are reached through the promotion chain. No year chosen means the newest.
+    /// </summary>
+    private static async Task<(Guid Id, List<object> Years)?> RecordForYearAsync(
+        AcademyDbContext db, ICurrentUser currentUser, Guid? yearId, CancellationToken ct)
     {
-        if (await CurrentStudentIdAsync(db, currentUser, ct) is not { } id) return NotLinked();
+        if (await CurrentStudentIdAsync(db, currentUser, ct) is not { } current) return null;
+        var ids = await PromotionEndpoints.EarlierRecordsAsync(db, current, ct);
+        ids.Insert(0, current);
+        var records = await db.Students.AsNoTracking().Where(s => ids.Contains(s.Id))
+            .Select(s => new { s.Id, s.AcademicYearId, Year = s.AcademicYear.Name, s.AcademicYear.StartDate })
+            .ToListAsync(ct);
+        var picked = records.FirstOrDefault(r => r.AcademicYearId == yearId) ?? records.First(r => r.Id == current);
+        var years = records.OrderByDescending(r => r.StartDate)
+            .Select(r => (object)new { id = r.AcademicYearId, name = r.Year, selected = r.Id == picked.Id })
+            .ToList();
+        return (picked.Id, years);
+    }
+
+    private static async Task<IResult> Overview(Guid? yearId, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    {
+        if (await RecordForYearAsync(db, currentUser, yearId, ct) is not { } found) return NotLinked();
+        var (id, years) = found;
         var s = await db.StudentBalances().FirstOrDefaultAsync(r => r.Id == id, ct);
         if (s is null) return NotLinked();
 
@@ -54,11 +75,9 @@ public static class StudentPortalEndpoints
             r.Name,
             Faculty = teachers.Where(t => t.SubjectId == r.SubjectId).Select(t => t.FullName).Order().ToList()
         });
-        // Includes the tests from earlier years of a promoted student, like the report card.
-        var records = await PromotionEndpoints.EarlierRecordsAsync(db, id, ct);
-        records.Add(id);
+        // Only the chosen year's tests; earlier years are a choice in the portal's year selector.
         var recentTests = await db.TestResults.AsNoTracking()
-            .Where(r => records.Contains(r.StudentId))
+            .Where(r => r.StudentId == id)
             .OrderByDescending(r => r.Test.TestDate)
             .Take(5)
             .Select(r => new { r.Test.Title, Subject = r.Test.Subject.Name, r.Test.TestDate, r.Marks, r.Test.MaxMarks })
@@ -66,6 +85,7 @@ public static class StudentPortalEndpoints
 
         return Results.Ok(new
         {
+            years,
             student = new
             {
                 s.Id, s.FullName, s.Email, s.Phone, s.CourseName, s.AcademicYearName, s.AdmissionDate, s.Active
@@ -80,9 +100,10 @@ public static class StudentPortalEndpoints
         });
     }
 
-    private static async Task<IResult> ReportCard(AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
-        await CurrentStudentIdAsync(db, currentUser, ct) is { } id
-            ? await TestEndpoints.ReportCardAsync(id, db, access, currentUser, ct)
+    private static async Task<IResult> ReportCard(
+        Guid? yearId, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
+        await RecordForYearAsync(db, currentUser, yearId, ct) is { } found
+            ? await TestEndpoints.ReportCardAsync(found.Id, db, access, currentUser, ct)
             : NotLinked();
 
     private static async Task<IResult> CreateLogin(

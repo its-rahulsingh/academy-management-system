@@ -141,6 +141,10 @@ public static class FacultyPortalEndpoints
         return Results.Ok(new
         {
             faculty = new { faculty.Id, faculty.FullName, faculty.PayType, faculty.HourlyRate, faculty.AgreedPayout, faculty.Active },
+            // The academy's years, newest first, for the portal's year selector (the months shown stay within the chosen year).
+            years = (await db.AcademicYears.AsNoTracking().OrderByDescending(y => y.StartDate)
+                    .Select(y => new { y.Id, y.Name, y.StartDate, y.EndDate }).ToListAsync(ct))
+                .Where(y => y.StartDate <= Validate.Today),
             month = start.ToString("yyyy-MM"),
             thisMonth = new
             {

@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal, untracked, viewChild } fro
 import { Api, FormState, Notify, errorMessage } from '../../core/api';
 import { PortalOverview, PortalSession, PortalSessionList } from '../../core/models';
 import { UI, today } from '../../shared/ui';
+import { PortalYearService } from '../../core/portal-year';
 import { ClockPanelComponent } from './clock-panel';
 import { portalRefresh } from './teacher-shell';
 
@@ -149,9 +150,9 @@ export function duration(minutes: number): string {
             }
           </div>
           <div class="month-nav">
-            <button type="button" (click)="moveMonth(-1)" aria-label="Previous month">‹</button>
+            <button type="button" (click)="moveMonth(-1)" [disabled]="month() <= firstMonth()" aria-label="Previous month">‹</button>
             <strong>{{ monthLabel() }}</strong>
-            <button type="button" (click)="moveMonth(1)" [disabled]="month() >= thisMonth" aria-label="Next month">›</button>
+            <button type="button" (click)="moveMonth(1)" [disabled]="month() >= lastMonth()" aria-label="Next month">›</button>
           </div>
         </div>
         <div class="teacher-toolbar">
@@ -238,6 +239,17 @@ export class TeacherDashboardComponent {
   protected readonly counts = computed(() => this.list()?.counts ?? { all: 0, waiting: 0, approved: 0, paid: 0, removed: 0 });
   protected readonly truncated = computed(() => this.sessions().length >= 500);
   protected readonly clockPanel = viewChild(ClockPanelComponent);
+  private readonly portalYear = inject(PortalYearService);
+  /** The chosen academic year (or the one containing today), which bounds the months shown. */
+  private readonly year = computed(() => {
+    const years = this.portalYear.years();
+    return years.find(y => y.id === this.portalYear.selected()) ?? years[0];
+  });
+  protected readonly firstMonth = computed(() => this.year()?.startDate?.slice(0, 7) ?? '0000-00');
+  protected readonly lastMonth = computed(() => {
+    const end = this.year()?.endDate?.slice(0, 7);
+    return end && end < this.thisMonth ? end : this.thisMonth;
+  });
   /** Package faculty: attendance, not pay per class. */
   protected readonly isPackage = computed(() => this.overview()?.faculty.payType === 'Package');
   protected readonly visibleTabs = computed(() => (this.isPackage() ? this.tabs.filter(t => t.view !== 'paid') : this.tabs));
@@ -255,6 +267,17 @@ export class TeacherDashboardComponent {
     effect(() => {
       portalRefresh();
       untracked(() => this.load());
+    });
+    // Choosing another year shows its latest month (this month, for the current year).
+    effect(() => {
+      const last = this.lastMonth();
+      const first = this.firstMonth();
+      untracked(() => {
+        if (this.month() > last || this.month() < first) {
+          this.month.set(last);
+          this.load();
+        }
+      });
     });
   }
 
@@ -283,7 +306,7 @@ export class TeacherDashboardComponent {
 
   protected moveMonth(by: number): void {
     const next = shiftMonth(this.month(), by);
-    if (next > this.thisMonth) return;
+    if (next > this.lastMonth() || next < this.firstMonth()) return;
     this.month.set(next);
     this.load();
   }

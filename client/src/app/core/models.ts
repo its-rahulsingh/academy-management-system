@@ -395,6 +395,8 @@ export interface PromotionCandidates {
 // ---- Student portal ----
 
 export interface StudentPortalOverview {
+  /** The years this student can look at, newest first; one is the year shown. */
+  years: { id: string; name: string; selected: boolean }[];
   student: {
     id: string; fullName: string; email: string; phone: string; courseName: string; academicYearName: string; admissionDate: string; active: boolean;
   };

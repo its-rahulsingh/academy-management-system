@@ -1,5 +1,6 @@
 import { Component, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { PortalYearService } from '../../core/portal-year';
 import { Api, errorMessage } from '../../core/api';
 import { StudentReportCard } from '../../core/models';
 import { UI } from '../../shared/ui';
@@ -103,6 +104,7 @@ import { UI } from '../../shared/ui';
 })
 export class ReportCardComponent {
   private readonly api = inject(Api);
+  private readonly portalYear = inject(PortalYearService);
   /** Student id from the route. */
   readonly id = input('');
   /** True inside the student portal: the signed-in student's own report card. */
@@ -116,7 +118,8 @@ export class ReportCardComponent {
   constructor() {
     effect(() => {
       const path = this.portal() ? 'me/student/report-card' : `tests/report-cards/${this.id()}`;
-      this.api.get<StudentReportCard>(path).subscribe({
+      const query = this.portal() ? { yearId: this.portalYear.selected() || null } : {};
+      this.api.get<StudentReportCard>(path, query).subscribe({
         next: card => this.card.set(card),
         error: e => this.error.set(errorMessage(e)),
       });

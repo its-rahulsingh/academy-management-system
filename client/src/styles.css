@@ -616,3 +616,5 @@ label.subject-chip small { font-size: 10px; color: #a0a4b4; font-weight: 500; }
 
 .teacher-stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 860px) { .teacher-stats.three { grid-template-columns: 1fr; } }
+
+.year-pick { width: auto; padding: 8px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #2c2a5a; background: #f1f2f7; border-color: #e3e4ee; }

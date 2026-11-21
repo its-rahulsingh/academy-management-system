@@ -2,6 +2,7 @@ import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, errorMessage } from '../../core/api';
 import { StudentPortalOverview } from '../../core/models';
+import { PortalYearService } from '../../core/portal-year';
 import { UI } from '../../shared/ui';
 import { portalRefresh } from '../teacher/teacher-shell';
 
@@ -87,14 +88,16 @@ import { portalRefresh } from '../teacher/teacher-shell';
 })
 export class StudentDashboardComponent {
   private readonly api = inject(Api);
+  private readonly year = inject(PortalYearService);
   protected readonly data = signal<StudentPortalOverview | null>(null);
   protected readonly error = signal('');
 
   constructor() {
     effect(() => {
       portalRefresh();
+      const yearId = this.year.selected() || null;
       untracked(() =>
-        this.api.get<StudentPortalOverview>('me/student').subscribe({
+        this.api.get<StudentPortalOverview>('me/student', { yearId }).subscribe({
           next: d => {
             this.error.set('');
             this.data.set(d);

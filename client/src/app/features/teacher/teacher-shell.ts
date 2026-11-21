@@ -1,6 +1,7 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { Notify, errorMessage } from '../../core/api';
+import { Api, Notify, errorMessage } from '../../core/api';
+import { PortalYear, PortalYearService } from '../../core/portal-year';
 import { AuthService } from '../../core/auth.service';
 import { UI } from '../../shared/ui';
 
@@ -38,6 +39,13 @@ const PORTAL_NAV = {
           </div>
         </div>
         <nav class="teacher-nav" aria-label="Portal">
+          @if (yearService.years().length > 1) {
+            <select class="year-pick" aria-label="Academic year" [ngModel]="shownYear()" (ngModelChange)="yearService.selected.set($event)">
+              @for (y of yearService.years(); track y.id) {
+                <option [value]="y.id">{{ y.name }}</option>
+              }
+            </select>
+          }
           @for (item of links(); track item.link) {
             <a [routerLink]="item.link" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }"><span aria-hidden="true">{{ item.icon }}</span> {{ item.label }}</a>
           }
@@ -90,6 +98,41 @@ export class PortalShellComponent {
   readonly nav = input<keyof typeof PORTAL_NAV>('teacher');
   protected readonly links = computed(() => PORTAL_NAV[this.nav()]);
   protected readonly auth = inject(AuthService);
+  private readonly api = inject(Api);
+  protected readonly yearService = inject(PortalYearService);
+  /** The chosen year, or the default one (the first listed) until something is chosen. */
+  protected readonly shownYear = computed(() => this.yearService.selected() || this.yearService.years()[0]?.id || '');
+
+  constructor() {
+    this.yearService.reset();
+    // Load the years this login can choose between; again after a refresh or a password change.
+    effect(() => {
+      portalRefresh();
+      const nav = this.nav();
+      untracked(() => this.loadYears(nav));
+    });
+  }
+
+  private loadYears(nav: keyof typeof PORTAL_NAV): void {
+    if (this.auth.session().mustChangePassword) return;
+    if (nav === 'student') {
+      this.api.get<{ years: { id: string; name: string; selected: boolean }[] }>('me/student').subscribe({
+        next: r => this.yearService.years.set(r.years),
+        error: () => undefined,
+      });
+    } else {
+      this.api.get<{ years: PortalYear[] }>('me/faculty').subscribe({
+        next: r => {
+          const today = new Date().toISOString().slice(0, 10);
+          // Put the year that contains today first, so it is the default.
+          const years = [...r.years].sort((a, b) =>
+            Number((b.startDate ?? '') <= today && today <= (b.endDate ?? '')) - Number((a.startDate ?? '') <= today && today <= (a.endDate ?? '')));
+          this.yearService.years.set(years);
+        },
+        error: () => undefined,
+      });
+    }
+  }
   protected readonly notify = inject(Notify);
   private readonly router = inject(Router);
 
@@ -124,6 +167,7 @@ export class PortalShellComponent {
     try {
       await this.auth.changePassword(this.currentPassword, this.newPassword);
       this.passwordOpen.set(false);
+      this.loadYears(this.nav());
       this.notify.success('Password changed');
     } catch (error) {
       this.error.set(errorMessage(error));
@@ -133,6 +177,7 @@ export class PortalShellComponent {
   }
 
   protected async signOut(): Promise<void> {
+    this.yearService.reset();
     await this.auth.logout();
     await this.router.navigateByUrl('/login');
   }
