@@ -12,15 +12,27 @@ public static class Roles
     public const string Admin = "Admin";
     public const string Accountant = "Accountant";
     public const string Staff = "Staff";
+    /// <summary>
+    /// A faculty member's own portal login: logs teaching time and sees their own pay, nothing else.
+    /// Created from the faculty record (never picked from the Users screen), so it is always linked to one.
+    /// </summary>
+    public const string Faculty = "Faculty";
 
-    /// <summary>Roles an academy can hold, most privileged first.</summary>
+    /// <summary>Staff roles an academy can hold, most privileged first. These can be picked on the Users screen.</summary>
     public static readonly IReadOnlyList<string> Tenant = [SuperAdmin, Admin, Accountant, Staff];
 
-    /// <summary>Roles the given role may create or modify. Nobody manages their own level except SuperAdmin.</summary>
-    public static IReadOnlyList<string> ManageableBy(string? role) => role switch
+    /// <summary>Roles the given role may pick when creating a user or changing a user's role.</summary>
+    public static IReadOnlyList<string> AssignableBy(string? role) => role switch
     {
         Owner or SuperAdmin => Tenant,
         Admin => [Admin, Accountant, Staff],
+        _ => []
+    };
+
+    /// <summary>Roles whose accounts the given role may manage (rename, reset password, deactivate).</summary>
+    public static IReadOnlyList<string> ManageableBy(string? role) => role switch
+    {
+        Owner or SuperAdmin or Admin => [.. AssignableBy(role), Faculty],
         _ => []
     };
 }
@@ -59,13 +71,19 @@ public static class Permissions
     public const string BrandingManage = "branding.manage";
     /// <summary>Review applications from the public admission form and open or close the form.</summary>
     public const string AdmissionsManage = "admissions.manage";
+    /// <summary>The staff workspace (dashboard and year switch). Every role has it except a faculty portal login.</summary>
+    public const string Workspace = "workspace.use";
+    /// <summary>A faculty member's own portal: their sessions and pay.</summary>
+    public const string FacultyPortal = "faculty.portal";
+    /// <summary>The day-by-day activity report of everything that happened in the academy.</summary>
+    public const string ReportsActivity = "reports.activity";
 
     public static readonly IReadOnlyList<string> All =
     [
         DashboardFinance, StudentsRead, StudentsWrite, CoursesRead, CoursesWrite, FacultyRead, FacultyWrite,
         PaymentsRead, PaymentsWrite, LedgerCorrect, PayoutsRead, PayoutsWrite, ExpensesRead, ExpensesWrite,
         TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage, YearsManage,
-        BrandingManage, AdmissionsManage
+        BrandingManage, AdmissionsManage, Workspace, FacultyPortal, ReportsActivity
     ];
 }
 
@@ -73,11 +91,12 @@ public static class RolePermissions
 {
     private static readonly FrozenDictionary<string, FrozenSet<string>> Map = new Dictionary<string, FrozenSet<string>>
     {
-        [Roles.SuperAdmin] = Permissions.All.ToFrozenSet(),
-        [Roles.Admin] = Permissions.All.Except([Permissions.BillingManage, Permissions.YearsManage, Permissions.BrandingManage]).ToFrozenSet(),
+        [Roles.SuperAdmin] = Permissions.All.Except([Permissions.FacultyPortal]).ToFrozenSet(),
+        [Roles.Admin] = Permissions.All.Except(
+            [Permissions.BillingManage, Permissions.YearsManage, Permissions.BrandingManage, Permissions.ReportsActivity, Permissions.FacultyPortal]).ToFrozenSet(),
         [Roles.Accountant] = new[]
         {
-            Permissions.DashboardFinance, Permissions.StudentsRead, Permissions.CoursesRead, Permissions.FacultyRead,
+            Permissions.Workspace, Permissions.DashboardFinance, Permissions.StudentsRead, Permissions.CoursesRead, Permissions.FacultyRead,
             Permissions.PaymentsRead, Permissions.PaymentsWrite, Permissions.LedgerCorrect, Permissions.PayoutsRead,
             Permissions.PayoutsWrite, Permissions.ExpensesRead, Permissions.ExpensesWrite, Permissions.ReportsRead,
             Permissions.RemindersSend
@@ -85,9 +104,10 @@ public static class RolePermissions
         // Front desk: admits students, collects fees, records marks. Sees no expenses, payouts or totals.
         [Roles.Staff] = new[]
         {
-            Permissions.StudentsRead, Permissions.StudentsWrite, Permissions.CoursesRead, Permissions.PaymentsRead,
+            Permissions.Workspace, Permissions.StudentsRead, Permissions.StudentsWrite, Permissions.CoursesRead, Permissions.PaymentsRead,
             Permissions.PaymentsWrite, Permissions.TestsRead, Permissions.TestsWrite, Permissions.AdmissionsManage
-        }.ToFrozenSet()
+        }.ToFrozenSet(),
+        [Roles.Faculty] = new[] { Permissions.FacultyPortal }.ToFrozenSet()
     }.ToFrozenDictionary();
 
     public static IReadOnlyCollection<string> For(string? role) =>

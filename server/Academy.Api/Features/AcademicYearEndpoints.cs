@@ -20,7 +20,7 @@ public static class AcademicYearEndpoints
     public static void MapAcademicYearEndpoints(this RouteGroupBuilder academy)
     {
         var group = academy.MapGroup("/academic-years");
-        group.MapGet("", List);
+        group.MapGet("", List).RequirePermission(Permissions.Workspace);
         group.MapPost("", Create).RequirePermission(Permissions.YearsManage);
         group.MapPut("/{id:guid}", Update).RequirePermission(Permissions.YearsManage);
     }

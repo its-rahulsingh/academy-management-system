@@ -281,6 +281,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(240)")
                         .HasColumnName("email");
 
+                    b.Property<Guid?>("FacultyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("faculty_id");
+
                     b.Property<int>("FailedLoginCount")
                         .HasColumnType("integer")
                         .HasColumnName("failed_login_count");
@@ -325,6 +329,11 @@ namespace Academy.Api.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_app_users_email")
                         .HasFilter("tenant_id IS NULL");
+
+                    b.HasIndex("FacultyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_app_users_faculty_id")
+                        .HasFilter("faculty_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "Email")
                         .IsUnique()
@@ -837,6 +846,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id");
 
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("end_time");
+
                     b.Property<Guid>("FacultyId")
                         .HasColumnType("uuid")
                         .HasColumnName("faculty_id");
@@ -849,6 +862,30 @@ namespace Academy.Api.Data.Migrations
                     b.Property<int>("Minutes")
                         .HasColumnType("integer")
                         .HasColumnName("minutes");
+
+                    b.Property<string>("Review")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("review");
+
+                    b.Property<string>("ReviewNote")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -898,6 +935,9 @@ namespace Academy.Api.Data.Migrations
 
                     b.HasIndex("TenantId", "FacultyId")
                         .HasDatabaseName("ix_faculty_sessions_tenant_id_faculty_id");
+
+                    b.HasIndex("TenantId", "Review")
+                        .HasDatabaseName("ix_faculty_sessions_tenant_id_review");
 
                     b.HasIndex("TenantId", "TaughtOn")
                         .HasDatabaseName("ix_faculty_sessions_tenant_id_taught_on");
@@ -1792,6 +1832,12 @@ namespace Academy.Api.Data.Migrations
 
             modelBuilder.Entity("Academy.Api.Domain.AppUser", b =>
                 {
+                    b.HasOne("Academy.Api.Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_app_users_faculty_faculty_id");
+
                     b.HasOne("Academy.Api.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

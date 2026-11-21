@@ -18,6 +18,8 @@ public sealed class AppUser : Entity
     public int FailedLoginCount { get; set; }
     public DateTime? LockoutEndUtc { get; set; }
     public DateTime? LastLoginAtUtc { get; set; }
+    /// <summary>Set only for a faculty portal login: the faculty record this account belongs to.</summary>
+    public Guid? FacultyId { get; set; }
 
     public static string NewStamp() => Guid.NewGuid().ToString("N");
 

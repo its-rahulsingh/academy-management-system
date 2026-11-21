@@ -25,6 +25,7 @@ const ACADEMY_NAV: NavItem[] = [
   { label: 'Expenses', icon: '▥', link: '/app/expenses', permission: Permission.ExpensesRead },
   { label: 'Tests', icon: '☑', link: '/app/tests', permission: Permission.TestsRead },
   { label: 'Reports', icon: '◔', link: '/app/reports', permission: Permission.ReportsRead },
+  { label: 'Daily report', icon: '◑', link: '/app/daily-report', permission: Permission.ReportsActivity },
   { label: 'Users', icon: '⚙', link: '/app/users', permission: Permission.UsersManage },
   { label: 'Activity log', icon: '☰', link: '/app/audit', permission: Permission.AuditRead },
   { label: 'Academic years', icon: '◷', link: '/app/academic-years', permission: Permission.YearsManage },

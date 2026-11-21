@@ -126,6 +126,10 @@ internal sealed class FacultySessionConfiguration : IEntityTypeConfiguration<Fac
         e.Property(x => x.HourlyRate).IsMoney();
         e.Property(x => x.Amount).IsMoney();
         e.Property(x => x.Topic).HasMaxLength(200);
+        e.Property(x => x.Review).IsEnumText();
+        e.Property(x => x.ReviewNote).HasMaxLength(500);
+        // The approval queue: sessions waiting for review.
+        e.HasIndex(x => new { x.TenantId, x.Review });
         e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
         e.ToTable(t => t.HasCheckConstraint("ck_faculty_sessions_minutes", $"minutes > 0 and minutes <= {FacultySession.MaxMinutes}"));
         e.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);

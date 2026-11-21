@@ -92,7 +92,14 @@ export const ownerOnly: CanActivateFn = () => {
 export const academyOnly: CanActivateFn = () => {
   const auth = inject(AuthService);
   if (!auth.session().authenticated) return inject(Router).parseUrl('/login');
-  return auth.tenant() ? true : inject(Router).parseUrl(auth.homeUrl());
+  return auth.tenant() && !auth.isFaculty() ? true : inject(Router).parseUrl(auth.homeUrl());
+};
+
+/** The faculty portal: only a faculty login whose academy has access. */
+export const facultyOnly: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  if (!auth.session().authenticated) return inject(Router).parseUrl('/login');
+  return auth.isFaculty() && auth.hasAccess() ? true : inject(Router).parseUrl(auth.homeUrl());
 };
 
 /** For screens that need a subscription in good standing and, optionally, a permission. */

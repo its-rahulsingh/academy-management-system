@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Use the stable EF Core 10 provider, not EF Core 11 prerelease. -->
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="MailKit" Version="5.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

@@ -144,9 +144,9 @@ public sealed class LedgerTests(AppFactory factory)
         var report = await academy.Admin.GetJsonAsync("/api/reports/summary");
         Assert.Equal(7000, report.Money("netCollections"));
         Assert.Equal(3500, report.Money("netCash"));
-        Assert.Equal(12, report["months"]!.AsArray().Count);
+        Assert.Equal(12, report["periods"]!.AsArray().Count);
 
-        var csv = await academy.Admin.GetStringAsync("/api/reports/export/payments");
+        var csv = await academy.Admin.GetStringAsync("/api/reports/export/payments?format=csv");
         Assert.Contains("RCP-000001", csv);
         Assert.Contains("Asha Rao", csv);
     }

@@ -35,7 +35,7 @@ public static class UserEndpoints
 
         return Results.Ok(new
         {
-            assignableRoles = manageable,
+            assignableRoles = Roles.AssignableBy(currentUser.Role),
             items = users.Select(u => new
             {
                 u.Id, u.Email, u.DisplayName, u.Role, u.Active, u.LastLoginAtUtc,
@@ -51,15 +51,15 @@ public static class UserEndpoints
         if (!Validate.Name(request.DisplayName, 140) || !Validate.Email(request.Email))
             return ApiResults.Bad("Enter a name and a valid email address.");
         if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
-        if (!Roles.ManageableBy(currentUser.Role).Contains(request.Role ?? ""))
-            return ApiResults.Bad("You cannot create an account with that role.");
+        if (!Roles.AssignableBy(currentUser.Role).Contains(request.Role ?? ""))
+            return ApiResults.Bad(request.Role == Roles.Faculty
+                ? "Give a faculty member a login from the Faculty screen, so it is linked to their record."
+                : "You cannot create an account with that role.");
 
         var email = request.Email!.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(u => u.Email == email, ct)) return ApiResults.Conflict("That email already has an account.");
 
-        var limits = await access.GetAsync(currentUser.TenantId!.Value, ct);
-        if (limits?.MaxUsers is { } max && await db.Users.CountAsync(u => u.Active, ct) >= max)
-            return ApiResults.Bad($"Your plan allows {max} active users. Deactivate one or upgrade the plan.");
+        if (await PlanUserLimitAsync(db, access, currentUser, ct) is { } limit) return limit;
 
         var user = new AppUser
         {
@@ -80,7 +80,10 @@ public static class UserEndpoints
         var (user, error) = await FindManageableAsync(db, currentUser, id, ct);
         if (user is null) return error!;
         if (!Validate.Name(request.DisplayName, 140)) return ApiResults.Bad("Enter a name.");
-        if (!Roles.ManageableBy(currentUser.Role).Contains(request.Role ?? ""))
+        // A faculty login stays a faculty login: its role is tied to the faculty record it belongs to.
+        if ((user.Role == Roles.Faculty || request.Role == Roles.Faculty) && user.Role != request.Role)
+            return ApiResults.Bad("A faculty login cannot be changed to a staff role, or a staff login to a faculty one.");
+        if (user.Role != Roles.Faculty && !Roles.AssignableBy(currentUser.Role).Contains(request.Role ?? ""))
             return ApiResults.Bad("You cannot assign that role.");
         if (user.Id == currentUser.UserId && user.Role != request.Role)
             return ApiResults.Bad("You cannot change your own role.");
@@ -125,6 +128,18 @@ public static class UserEndpoints
         sessions.Forget(user.Id);
         await db.SaveChangesAsync(ct);
         return Results.Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// The plan's user limit counts staff logins. Faculty portal logins are left out: an academy may have many
+    /// hourly tutors, and their login only reaches their own pay.
+    /// </summary>
+    internal static async Task<IResult?> PlanUserLimitAsync(AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
+    {
+        var limits = await access.GetAsync(currentUser.TenantId!.Value, ct);
+        return limits?.MaxUsers is { } max && await db.Users.CountAsync(u => u.Active && u.Role != Roles.Faculty, ct) >= max
+            ? ApiResults.Bad($"Your plan allows {max} active users. Deactivate one or upgrade the plan.")
+            : null;
     }
 
     private static async Task<(AppUser? User, IResult? Error)> FindManageableAsync(

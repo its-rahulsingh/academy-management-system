@@ -151,6 +151,7 @@ export class StatusComponent {
       case 'Trialing':
       case 'Open':
       case 'Upcoming':
+      case 'Approved · unpaid':
         return 'info';
       case 'Voided':
       case 'Void':
@@ -160,6 +161,7 @@ export class StatusComponent {
       case 'Inactive':
       case 'Disabled':
       case 'Rejected':
+      case 'Withdrawn':
         return 'bad';
       default:
         return 'warn';

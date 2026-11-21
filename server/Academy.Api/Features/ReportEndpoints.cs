@@ -5,6 +5,7 @@ using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Features;
@@ -51,7 +52,7 @@ public static class FinanceQueries
 public static class DashboardEndpoints
 {
     public static void MapDashboardEndpoints(this RouteGroupBuilder academy) =>
-        academy.MapGet("/dashboard", Dashboard).RequireAuthorization();
+        academy.MapGet("/dashboard", Dashboard).RequirePermission(Permissions.Workspace);
 
     private static async Task<IResult> Dashboard(HttpContext http, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
@@ -120,7 +121,9 @@ public static class ReportEndpoints
     {
         var group = academy.MapGroup("/reports").RequirePermission(Permissions.ReportsRead);
         group.MapGet("/summary", Summary);
+        group.MapGet("/summary/excel", SummaryExcel);
         group.MapGet("/export/{kind}", Export);
+        academy.MapActivityReportEndpoints();
     }
 
     /// <summary>Explicit dates win; otherwise the selected academic year; with no year, the last twelve months.</summary>
@@ -131,112 +134,207 @@ public static class ReportEndpoints
         return start <= end ? (start, end) : (end, start);
     }
 
-    private static async Task<IResult> Summary(DateOnly? from, DateOnly? to, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
+    private sealed record PeriodRow(string Label, DateOnly From, DateOnly To, int Admissions, decimal Collections, decimal Refunds, decimal Expenses, decimal Payouts)
     {
-        var year = await years.GetAsync(ct);
-        var (start, end) = Range(from, to, year);
+        public decimal NetCollections => Collections - Refunds;
+        public decimal Net => Collections - Refunds - Expenses - Payouts;
+    }
+
+    private sealed record SummaryData(
+        DateOnly From, DateOnly To, ReportGrouping Grouping, List<PeriodRow> Periods,
+        decimal Collections, decimal Refunds, decimal Expenses, decimal Payouts,
+        List<(string Method, decimal Amount, int Count)> ByMethod, List<(string Category, decimal Amount, int Count)> ByCategory,
+        List<CourseFinance> Courses);
+
+    private static async Task<SummaryData> LoadSummaryAsync(DateOnly start, DateOnly end, ReportGrouping grouping, Guid? yearId, AcademyDbContext db, CancellationToken ct)
+    {
         var payments = db.StudentPayments.Where(p => p.Status == LedgerStatus.Posted && p.PaidOn >= start && p.PaidOn <= end);
         var expenses = db.Expenses.Where(e => e.Status == LedgerStatus.Posted && e.SpentOn >= start && e.SpentOn <= end);
         var payouts = db.FacultyPayouts.Where(p => p.Status == LedgerStatus.Posted && p.PaidOn >= start && p.PaidOn <= end);
 
-        var paymentMonths = await payments.GroupBy(p => new { p.PaidOn.Year, p.PaidOn.Month, p.Kind })
-            .Select(g => new { g.Key.Year, g.Key.Month, g.Key.Kind, Amount = g.Sum(p => p.Amount) }).ToListAsync(ct);
-        var expenseMonths = await expenses.GroupBy(e => new { e.SpentOn.Year, e.SpentOn.Month })
-            .Select(g => new { g.Key.Year, g.Key.Month, Amount = g.Sum(e => e.Amount) }).ToListAsync(ct);
-        var payoutMonths = await payouts.GroupBy(p => new { p.PaidOn.Year, p.PaidOn.Month })
-            .Select(g => new { g.Key.Year, g.Key.Month, Amount = g.Sum(p => p.Amount) }).ToListAsync(ct);
+        // Totals per date from the database; the grouping into days, weeks or months happens here.
+        var paymentDays = await payments.GroupBy(p => new { p.PaidOn, p.Kind })
+            .Select(g => new { Date = g.Key.PaidOn, g.Key.Kind, Amount = g.Sum(p => p.Amount) }).ToListAsync(ct);
+        var expenseDays = await expenses.GroupBy(e => e.SpentOn)
+            .Select(g => new { Date = g.Key, Amount = g.Sum(e => e.Amount) }).ToListAsync(ct);
+        var payoutDays = await payouts.GroupBy(p => p.PaidOn)
+            .Select(g => new { Date = g.Key, Amount = g.Sum(p => p.Amount) }).ToListAsync(ct);
+        var admissionDays = await db.Students.Where(s => s.AdmissionDate >= start && s.AdmissionDate <= end).GroupBy(s => s.AdmissionDate)
+            .Select(g => new { Date = g.Key, Count = g.Count() }).ToListAsync(ct);
         var byMethod = await payments.Where(p => p.Kind == PaymentKind.Payment).GroupBy(p => p.Method)
             .Select(g => new { Method = g.Key, Amount = g.Sum(p => p.Amount), Count = g.Count() }).ToListAsync(ct);
         var byCategory = await expenses.GroupBy(e => e.Category)
             .Select(g => new { Category = g.Key, Amount = g.Sum(e => e.Amount), Count = g.Count() }).ToListAsync(ct);
 
-        var months = new List<object>();
-        for (var month = new DateOnly(start.Year, start.Month, 1); month <= end; month = month.AddMonths(1))
-        {
-            var received = paymentMonths.Where(m => m.Year == month.Year && m.Month == month.Month && m.Kind == PaymentKind.Payment).Sum(m => m.Amount);
-            var refunded = paymentMonths.Where(m => m.Year == month.Year && m.Month == month.Month && m.Kind == PaymentKind.Refund).Sum(m => m.Amount);
-            var spent = expenseMonths.Where(m => m.Year == month.Year && m.Month == month.Month).Sum(m => m.Amount);
-            var paid = payoutMonths.Where(m => m.Year == month.Year && m.Month == month.Month).Sum(m => m.Amount);
-            months.Add(new { month = month.ToString("yyyy-MM"), collections = received - refunded, expenses = spent, payouts = paid, net = received - refunded - spent - paid });
-        }
+        DateOnly Key(DateOnly d) => ReportPeriods.StartOf(d, grouping);
+        var periods = ReportPeriods.Split(start, end, grouping).Select(p => new PeriodRow(
+            p.Label, p.From, p.To,
+            admissionDays.Where(x => Key(x.Date) == p.Key).Sum(x => x.Count),
+            paymentDays.Where(x => Key(x.Date) == p.Key && x.Kind == PaymentKind.Payment).Sum(x => x.Amount),
+            paymentDays.Where(x => Key(x.Date) == p.Key && x.Kind == PaymentKind.Refund).Sum(x => x.Amount),
+            expenseDays.Where(x => Key(x.Date) == p.Key).Sum(x => x.Amount),
+            payoutDays.Where(x => Key(x.Date) == p.Key).Sum(x => x.Amount))).ToList();
 
-        var collections = paymentMonths.Where(m => m.Kind == PaymentKind.Payment).Sum(m => m.Amount);
-        var refunds = paymentMonths.Where(m => m.Kind == PaymentKind.Refund).Sum(m => m.Amount);
-        var totalExpenses = expenseMonths.Sum(m => m.Amount);
-        var totalPayouts = payoutMonths.Sum(m => m.Amount);
-        var courses = await db.CourseFinancesAsync(year?.Id, ct);
+        return new SummaryData(start, end, grouping, periods,
+            paymentDays.Where(m => m.Kind == PaymentKind.Payment).Sum(m => m.Amount),
+            paymentDays.Where(m => m.Kind == PaymentKind.Refund).Sum(m => m.Amount),
+            expenseDays.Sum(m => m.Amount),
+            payoutDays.Sum(m => m.Amount),
+            byMethod.OrderByDescending(m => m.Amount).Select(m => (m.Method, m.Amount, m.Count)).ToList(),
+            byCategory.OrderByDescending(c => c.Amount).Select(c => (c.Category, c.Amount, c.Count)).ToList(),
+            await db.CourseFinancesAsync(yearId, ct));
+    }
+
+    private static IResult? CheckRange(DateOnly from, DateOnly to, ReportGrouping grouping) =>
+        grouping == ReportGrouping.Day && to.DayNumber - from.DayNumber >= ReportPeriods.MaxDays
+            ? ApiResults.Bad($"Day by day covers at most {ReportPeriods.MaxDays} days. Pick a shorter range, or group by week or month.")
+            : null;
+
+    private static async Task<IResult> Summary(DateOnly? from, DateOnly? to, string? groupBy, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
+    {
+        var year = await years.GetAsync(ct);
+        var (start, end) = Range(from, to, year);
+        var grouping = ReportPeriods.Parse(groupBy);
+        if (CheckRange(start, end, grouping) is { } error) return error;
+        var r = await LoadSummaryAsync(start, end, grouping, year?.Id, db, ct);
 
         return Results.Ok(new
         {
             from = start,
             to = end,
-            collections,
-            refunds,
-            netCollections = collections - refunds,
-            expenses = totalExpenses,
-            payouts = totalPayouts,
-            netCash = collections - refunds - totalExpenses - totalPayouts,
-            byMethod = byMethod.OrderByDescending(m => m.Amount),
-            expensesByCategory = byCategory.OrderByDescending(c => c.Amount),
-            months,
+            groupBy = grouping,
+            title = ReportPeriods.Title(grouping),
+            collections = r.Collections,
+            refunds = r.Refunds,
+            netCollections = r.Collections - r.Refunds,
+            expenses = r.Expenses,
+            payouts = r.Payouts,
+            netCash = r.Collections - r.Refunds - r.Expenses - r.Payouts,
+            admissions = r.Periods.Sum(p => p.Admissions),
+            byMethod = r.ByMethod.Select(m => new { m.Method, m.Amount, m.Count }),
+            expensesByCategory = r.ByCategory.Select(c => new { c.Category, c.Amount, c.Count }),
+            periods = r.Periods.Select(p => new
+            {
+                p.Label, p.From, p.To, p.Admissions, p.Collections, p.Refunds, collectionsNet = p.NetCollections, p.Expenses, p.Payouts, p.Net
+            }),
             // Outstanding fees are a position as of now for the selected year's students, not a flow within the date range.
-            courses = courses.Select(c => new { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending })
+            courses = r.Courses.Select(c => new { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending })
         });
     }
 
-    private static async Task<IResult> Export(string kind, DateOnly? from, DateOnly? to, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
+    private static async Task<IResult> SummaryExcel(
+        DateOnly? from, DateOnly? to, string? groupBy, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
         var year = await years.GetAsync(ct);
         var (start, end) = Range(from, to, year);
-        var csv = new Csv();
+        var grouping = ReportPeriods.Parse(groupBy);
+        if (CheckRange(start, end, grouping) is { } error) return error;
+        var r = await LoadSummaryAsync(start, end, grouping, year?.Id, db, ct);
+
+        using var book = new XLWorkbook();
+        var money = new HashSet<int> { 2, 3, 4, 5, 6, 7 };
+        var sheet = Excel.Sheet(book, ReportPeriods.Title(grouping),
+            ["Period", "Admissions", "Fees collected", "Refunds", "Net collections", "Expenses", "Faculty payouts", "Net cash"],
+            r.Periods.Select(p => new object?[] { p.Label, p.Admissions, p.Collections, p.Refunds, p.NetCollections, p.Expenses, p.Payouts, p.Net }),
+            money);
+        Excel.TotalRow(sheet,
+        [
+            "Total", r.Periods.Sum(p => p.Admissions), r.Collections, r.Refunds, r.Collections - r.Refunds, r.Expenses, r.Payouts,
+            r.Collections - r.Refunds - r.Expenses - r.Payouts
+        ], money);
+
+        Excel.Sheet(book, "Collections by method", ["Method", "Payments", "Amount"],
+            r.ByMethod.Select(m => new object?[] { m.Method, m.Count, m.Amount }), new HashSet<int> { 2 });
+        Excel.Sheet(book, "Expenses by category", ["Category", "Entries", "Amount"],
+            r.ByCategory.Select(c => new object?[] { c.Category, c.Count, c.Amount }), new HashSet<int> { 2 });
+        Excel.Sheet(book, "Fees by course", ["Course", "Students", "Payable", "Collected", "Pending"],
+            r.Courses.Select(c => new object?[] { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending }), new HashSet<int> { 2, 3, 4 });
+
+        return Excel.File(book, $"summary-{start:yyyyMMdd}-{end:yyyyMMdd}-{grouping.ToString().ToLowerInvariant()}.xlsx");
+    }
+
+    private static async Task<IResult> Export(
+        string kind, DateOnly? from, DateOnly? to, string? format, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
+    {
+        var year = await years.GetAsync(ct);
+        var (start, end) = Range(from, to, year);
+        string[] headers;
+        List<object?[]> rows;
+        ISet<int> money;
+        string title;
 
         switch (kind)
         {
             case "payments":
-                csv.Row("Receipt", "Date", "Student", "Type", "Method", "Amount", "Status", "Notes", "Void reason");
-                var payments = await db.StudentPayments.AsNoTracking()
+                title = "Payments and refunds";
+                headers = ["Receipt", "Date", "Student", "Type", "Method", "Amount", "Status", "Notes", "Void reason"];
+                money = new HashSet<int> { 5 };
+                rows = (await db.StudentPayments.AsNoTracking()
                     .Where(p => p.PaidOn >= start && p.PaidOn <= end)
                     .OrderBy(p => p.PaidOn).ThenBy(p => p.ReceiptNumber).Take(MaxExportRows)
                     .Select(p => new { p.ReceiptNumber, p.PaidOn, Student = p.Student.FullName, p.Kind, p.Method, p.Amount, p.Status, p.Notes, p.VoidReason })
-                    .ToListAsync(ct);
-                foreach (var p in payments)
-                    csv.Row(StudentLedger.ReceiptLabel(p.ReceiptNumber), p.PaidOn, p.Student, p.Kind, p.Method, p.Amount, p.Status, p.Notes, p.VoidReason);
+                    .ToListAsync(ct))
+                    .Select(p => new object?[] { StudentLedger.ReceiptLabel(p.ReceiptNumber), p.PaidOn, p.Student, p.Kind.ToString(), p.Method, p.Amount, p.Status.ToString(), p.Notes, p.VoidReason })
+                    .ToList();
                 break;
 
             case "expenses":
-                csv.Row("Date", "Title", "Category", "Method", "Amount", "Status", "Notes", "Void reason");
-                var expenses = await db.Expenses.AsNoTracking()
+                title = "Expenses";
+                headers = ["Date", "Title", "Category", "Method", "Amount", "Status", "Notes", "Void reason"];
+                money = new HashSet<int> { 4 };
+                rows = (await db.Expenses.AsNoTracking()
                     .Where(e => e.SpentOn >= start && e.SpentOn <= end)
-                    .OrderBy(e => e.SpentOn).Take(MaxExportRows).ToListAsync(ct);
-                foreach (var e in expenses) csv.Row(e.SpentOn, e.Title, e.Category, e.Method, e.Amount, e.Status, e.Notes, e.VoidReason);
+                    .OrderBy(e => e.SpentOn).Take(MaxExportRows).ToListAsync(ct))
+                    .Select(e => new object?[] { e.SpentOn, e.Title, e.Category, e.Method, e.Amount, e.Status.ToString(), e.Notes, e.VoidReason })
+                    .ToList();
                 break;
 
             case "payouts":
-                csv.Row("Date", "Faculty", "Method", "Amount", "Status", "Notes", "Void reason");
-                var payouts = await db.FacultyPayouts.AsNoTracking()
+                title = "Faculty payouts";
+                headers = ["Date", "Faculty", "Method", "Amount", "Status", "Notes", "Void reason"];
+                money = new HashSet<int> { 3 };
+                rows = (await db.FacultyPayouts.AsNoTracking()
                     .Where(p => p.PaidOn >= start && p.PaidOn <= end)
                     .OrderBy(p => p.PaidOn).Take(MaxExportRows)
                     .Select(p => new { p.PaidOn, Faculty = p.Faculty.FullName, p.Method, p.Amount, p.Status, p.Notes, p.VoidReason })
-                    .ToListAsync(ct);
-                foreach (var p in payouts) csv.Row(p.PaidOn, p.Faculty, p.Method, p.Amount, p.Status, p.Notes, p.VoidReason);
+                    .ToListAsync(ct))
+                    .Select(p => new object?[] { p.PaidOn, p.Faculty, p.Method, p.Amount, p.Status.ToString(), p.Notes, p.VoidReason })
+                    .ToList();
                 break;
 
             case "students":
-                csv.Row("Student", "Academic year", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Pending", "Status", "Active");
-                var students = await db.StudentBalances()
+                title = "Student fee status";
+                headers = ["Student", "Academic year", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Pending", "Status", "Active"];
+                money = new HashSet<int> { 6, 7, 8, 9, 10, 11 };
+                rows = (await db.StudentBalances()
                     .Where(s => year == null || s.AcademicYearId == year.Id)
-                    .OrderBy(s => s.FullName).Take(MaxExportRows).ToListAsync(ct);
-                foreach (var s in students)
-                    csv.Row(s.FullName, s.AcademicYearName, s.Email, s.Phone, s.CourseName, s.AdmissionDate, s.FeeAmount, s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status, s.Active ? "Yes" : "No");
+                    .OrderBy(s => s.FullName).Take(MaxExportRows).ToListAsync(ct))
+                    .Select(s => new object?[]
+                    {
+                        s.FullName, s.AcademicYearName, s.Email, s.Phone, s.CourseName, s.AdmissionDate, s.FeeAmount, s.Discounts, s.Surcharges,
+                        s.Payable, s.Paid, s.Pending, s.Status, s.Active ? "Yes" : "No"
+                    })
+                    .ToList();
                 break;
 
             default:
                 return Results.NotFound();
         }
 
-        // The BOM makes Excel open the file as UTF-8, so names and the rupee sign survive.
-        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
-        return Results.File(bytes, "text/csv; charset=utf-8", $"{kind}-{start:yyyyMMdd}-{end:yyyyMMdd}.csv");
+        var fileName = $"{kind}-{start:yyyyMMdd}-{end:yyyyMMdd}";
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            var csv = new Csv();
+            csv.Row(headers);
+            foreach (var row in rows) csv.Row(row);
+            // The BOM makes Excel open the file as UTF-8, so names and the rupee sign survive.
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
+            return Results.File(bytes, "text/csv; charset=utf-8", fileName + ".csv");
+        }
+
+        using var book = new XLWorkbook();
+        Excel.Sheet(book, title, headers, rows, money);
+        return Excel.File(book, fileName + ".xlsx");
     }
 
     private sealed class Csv

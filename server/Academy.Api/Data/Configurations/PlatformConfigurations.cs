@@ -124,6 +124,9 @@ internal sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         e.Property(x => x.Role).HasMaxLength(20);
         e.Property(x => x.SecurityStamp).HasMaxLength(32);
         e.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        // One portal login per faculty member.
+        e.HasIndex(x => x.FacultyId).IsUnique().HasFilter("faculty_id IS NOT NULL");
+        e.HasOne<Faculty>().WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

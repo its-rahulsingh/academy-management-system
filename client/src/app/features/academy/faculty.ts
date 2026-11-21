@@ -3,6 +3,7 @@ import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api'
 import { AuthService } from '../../core/auth.service';
 import { Faculty, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission, SubjectRef } from '../../core/models';
 import { UI, today } from '../../shared/ui';
+import { clock } from '../teacher/teacher-dashboard';
 import { SubjectPickerComponent } from './subjects';
 
 /** Same rounding as the server: minutes × hourly rate ÷ 60, to the paisa. */
@@ -37,6 +38,35 @@ function sessionPay(minutes: number, hourlyRate: number): number {
       <div class="alert" role="alert">{{ error() }}</div>
     }
 
+    @if (can(permission.PayoutsWrite) && waiting.total()) {
+      <section class="surface review-queue">
+        <div class="surface-title">
+          <h2>Waiting for approval</h2>
+          <small class="muted">{{ waiting.total() }} {{ waiting.total() === 1 ? 'session' : 'sessions' }} submitted from the faculty portal</small>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>FACULTY</th><th>DATE</th><th>TIME</th><th>AMOUNT</th><th></th></tr></thead>
+            <tbody>
+              @for (s of waiting.items(); track s.id) {
+                <tr>
+                  <td><strong>{{ s.facultyName }}</strong><small>{{ sessionLabel(s) || 'No topic given' }}</small></td>
+                  <td>{{ s.taughtOn | day }}</td>
+                  <td>{{ timeLabel(s) }}</td>
+                  <td>{{ s.amount | money: true }}<small>{{ s.hourlyRate | money }} / hour</small></td>
+                  <td class="row-actions">
+                    <button type="button" class="table-action" [disabled]="reviewing()" (click)="approve(s)">✓ Approve</button>
+                    <button type="button" class="table-action danger-text" (click)="rejectTarget.set(s)">Reject</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pager [page]="waiting.page()" [total]="waiting.total()" (pageChange)="waiting.load($event)" />
+      </section>
+    }
+
     <div class="stats four">
       <article class="stat white"><div class="stat-top">FACULTY</div><div class="stat-value">{{ faculty().length }}</div><small>{{ hourly().length }} paid hourly</small></article>
       <article class="stat white"><div class="stat-top">EARNED</div><div class="stat-value">{{ earned() | money }}</div><small>Packages + logged sessions</small></article>
@@ -57,10 +87,13 @@ function sessionPay(minutes: number, hourlyRate: number): number {
                 } @else {
                   <small>{{ f.specialization || f.phone || f.email || '—' }}</small>
                 }
+                @if (f.login) {
+                  <small class="muted">Portal: {{ f.login.email }}{{ f.login.active ? '' : ' (disabled)' }}</small>
+                }
               </td>
               <td>
                 @if (f.payType === 'Hourly') {
-                  <strong>{{ f.hourlyRate | money }} / hour</strong><small>{{ f.minutesTaught }} min taught</small>
+                  <strong>{{ f.hourlyRate | money }} / hour</strong><small>{{ f.minutesTaught }} min approved{{ f.pendingSessions ? ' · ' + f.pendingSessions + ' waiting' : '' }}</small>
                 } @else {
                   <strong>Package</strong><small>{{ f.agreedPayout | money }}</small>
                 }
@@ -75,6 +108,9 @@ function sessionPay(minutes: number, hourlyRate: number): number {
                 }
                 @if (can(permission.PayoutsWrite) && f.earned - f.paid > 0) {
                   <button type="button" class="table-action" (click)="openPayout(f)">Pay</button>
+                }
+                @if (can(permission.UsersManage) && !f.login) {
+                  <button type="button" class="table-action" (click)="openLogin(f)">Give portal login</button>
                 }
                 @if (can(permission.FacultyWrite)) {
                   <button type="button" class="table-action" (click)="openForm(f)">Edit →</button>
@@ -96,15 +132,15 @@ function sessionPay(minutes: number, hourlyRate: number): number {
             <thead><tr><th>FACULTY</th><th>DATE</th><th>TIME</th><th>RATE</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead>
             <tbody>
               @for (s of sessions.items(); track s.id) {
-                <tr [class.dimmed]="s.status === 'Voided'">
-                  <td><strong>{{ s.facultyName }}</strong><small>{{ s.status === 'Voided' ? 'Voided: ' + s.voidReason : sessionLabel(s) }}</small></td>
+                <tr [class.dimmed]="s.status === 'Voided' || s.review === 'Rejected'">
+                  <td><strong>{{ s.facultyName }}</strong><small>{{ s.status === 'Voided' ? 'Voided: ' + s.voidReason : s.review === 'Rejected' ? 'Rejected: ' + s.reviewNote : sessionLabel(s) }}</small></td>
                   <td>{{ s.taughtOn | day }}</td>
-                  <td>{{ s.minutes }} min</td>
+                  <td>{{ timeLabel(s) }}</td>
                   <td>{{ s.hourlyRate | money }} / hour</td>
                   <td>{{ s.amount | money: true }}</td>
-                  <td><app-status [value]="s.status" /></td>
+                  <td><app-status [value]="sessionStatus(s)" /></td>
                   <td class="row-actions">
-                    @if (s.status === 'Posted' && can(permission.LedgerCorrect)) {
+                    @if (s.status === 'Posted' && s.review !== 'Rejected' && can(permission.LedgerCorrect)) {
                       <button type="button" class="table-action danger-text" (click)="voidSessionTarget.set(s)">Void</button>
                     }
                   </td>
@@ -258,6 +294,32 @@ function sessionPay(minutes: number, hourlyRate: number): number {
       />
     }
 
+    @if (login.open()) {
+      <app-modal title="Give portal login" saveLabel="Create login" [busy]="login.busy()" [error]="login.error()" (closed)="login.close()" (saved)="saveLogin()">
+        <p class="helper">
+          {{ loginModel.name }} will sign in with your academy code and this email, log their own teaching time and see their own pay.
+          They cannot see anything else in the academy.
+        </p>
+        <label for="loginEmail">Email *</label>
+        <input id="loginEmail" type="email" [(ngModel)]="loginModel.email" autocomplete="off" />
+        <label for="loginPassword">Initial password * (at least 12 characters)</label>
+        <input id="loginPassword" type="password" autocomplete="new-password" [(ngModel)]="loginModel.password" />
+        <div class="helper">Share it privately. They must choose their own password at first sign-in. Reset it later from the Users screen.</div>
+      </app-modal>
+    }
+
+    @if (rejectTarget(); as target) {
+      <app-reason-dialog
+        title="Reject session"
+        [description]="rejectText(target)"
+        confirmLabel="Reject"
+        [busy]="voiding.busy()"
+        [error]="voiding.error()"
+        (cancelled)="rejectTarget.set(null)"
+        (confirmed)="confirmReject(target, $event)"
+      />
+    }
+
     @if (voidSessionTarget(); as target) {
       <app-reason-dialog
         title="Void teaching time"
@@ -287,6 +349,14 @@ export class FacultyComponent {
   protected readonly sessions = new PagedList<FacultySession>((page, pageSize) =>
     this.api.get<Paged<FacultySession>>('faculty-sessions', { page, pageSize }),
   );
+  /** Sessions faculty submitted from their portal, waiting for someone to check them. */
+  protected readonly waiting = new PagedList<FacultySession>((page, pageSize) =>
+    this.api.get<Paged<FacultySession>>('faculty-sessions', { page, pageSize, review: 'Pending' }),
+  );
+  protected readonly reviewing = signal(false);
+  protected readonly rejectTarget = signal<FacultySession | null>(null);
+  protected readonly login = new FormState();
+  protected loginModel = { facultyId: '', name: '', email: '', password: '' };
 
   protected readonly form = new FormState();
   protected model = this.blank();
@@ -313,6 +383,7 @@ export class FacultyComponent {
       this.payouts.load();
       this.sessions.load();
     }
+    if (this.can(Permission.PayoutsWrite)) this.waiting.load();
   }
 
   private blank() {
@@ -328,6 +399,60 @@ export class FacultyComponent {
 
   protected sessionLabel(s: FacultySession): string {
     return [s.subjectName, s.topic].filter(Boolean).join(' — ');
+  }
+
+  protected timeLabel(s: FacultySession): string {
+    return s.startTime ? `${clock(s.startTime)} – ${clock(s.endTime)} · ${s.minutes} min` : `${s.minutes} min`;
+  }
+
+  protected sessionStatus(s: FacultySession): string {
+    if (s.status === 'Voided') return 'Voided';
+    return s.review === 'Pending' ? 'Waiting approval' : s.review === 'Rejected' ? 'Rejected' : 'Approved';
+  }
+
+  // ---- Portal sessions and logins ----
+
+  protected approve(s: FacultySession): void {
+    this.reviewing.set(true);
+    this.api.post(`faculty-sessions/${s.id}/approve`, {}).subscribe({
+      next: () => {
+        this.reviewing.set(false);
+        this.notify.success(`${s.minutes} min for ${s.facultyName} approved`);
+        this.load();
+      },
+      error: e => {
+        this.reviewing.set(false);
+        this.error.set(errorMessage(e));
+        this.load();
+      },
+    });
+  }
+
+  protected rejectText(s: FacultySession): string {
+    return `${s.minutes} min from ${s.facultyName} will not count towards pay. They will see your reason in their portal.`;
+  }
+
+  protected confirmReject(target: FacultySession, reason: string): void {
+    this.voiding.submit(this.api.post(`faculty-sessions/${target.id}/reject`, { reason }), () => {
+      this.rejectTarget.set(null);
+      this.notify.success('Session rejected');
+      this.load();
+    });
+  }
+
+  protected openLogin(f: Faculty): void {
+    this.loginModel = { facultyId: f.id, name: f.fullName, email: f.email, password: '' };
+    this.login.show();
+  }
+
+  protected saveLogin(): void {
+    const { facultyId, email, password } = this.loginModel;
+    if (!email.trim()) return this.login.fail('Enter the email they will sign in with.');
+    if (password.length < 12) return this.login.fail('The password must contain at least 12 characters.');
+    this.login.submit(this.api.post(`faculty/${facultyId}/login`, { email, password }), () => {
+      this.notify.success(`Portal login created for ${this.loginModel.name}`);
+      this.load();
+    });
   }
 
   protected openForm(f?: Faculty): void {

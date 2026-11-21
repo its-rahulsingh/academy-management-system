@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { academyOnly, guestOnly, ownerOnly, requires } from './core/api';
+import { academyOnly, facultyOnly, guestOnly, ownerOnly, requires } from './core/api';
 import { Permission } from './core/models';
 
 /**
@@ -33,11 +33,22 @@ export const routes: Routes = [
       { path: 'expenses', canActivate: [requires(Permission.ExpensesRead)], loadComponent: () => import('./features/academy/expenses').then(m => m.ExpensesComponent) },
       { path: 'tests', canActivate: [requires(Permission.TestsRead)], loadComponent: () => import('./features/academy/tests').then(m => m.TestsComponent) },
       { path: 'reports', canActivate: [requires(Permission.ReportsRead)], loadComponent: () => import('./features/academy/reports').then(m => m.ReportsComponent) },
+      { path: 'daily-report', canActivate: [requires(Permission.ReportsActivity)], loadComponent: () => import('./features/academy/daily-report').then(m => m.DailyReportComponent) },
       { path: 'users', canActivate: [requires(Permission.UsersManage)], loadComponent: () => import('./features/academy/users').then(m => m.UsersComponent) },
       { path: 'audit', canActivate: [requires(Permission.AuditRead)], loadComponent: () => import('./features/academy/audit').then(m => m.AuditComponent) },
       { path: 'academic-years', canActivate: [requires()], loadComponent: () => import('./features/academy/academic-years').then(m => m.AcademicYearsComponent) },
       // No subscription check here: an expired academy must be able to reach this page to pay.
       { path: 'billing', loadComponent: () => import('./features/academy/billing').then(m => m.BillingComponent) },
+    ],
+  },
+  {
+    // A faculty member's own portal: their teaching time and pay, nothing else.
+    path: 'teacher',
+    canActivate: [facultyOnly],
+    loadComponent: () => import('./features/teacher/teacher-shell').then(m => m.TeacherShellComponent),
+    children: [
+      { path: '', pathMatch: 'full', loadComponent: () => import('./features/teacher/teacher-dashboard').then(m => m.TeacherDashboardComponent) },
+      { path: 'payments', loadComponent: () => import('./features/teacher/teacher-payments').then(m => m.TeacherPaymentsComponent) },
     ],
   },
   {

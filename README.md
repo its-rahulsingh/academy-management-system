@@ -13,10 +13,11 @@ Stack: Angular 21 · ASP.NET Core 10 · PostgreSQL · one Docker container (Rend
 | Role | Belongs to | Can do |
 |---|---|---|
 | Owner | Platform | Create/suspend academies, plans, subscriptions, invoices, each academy's logo and tagline. Has no access to academy data screens. |
-| Super Admin | One academy | Everything in the academy, including the subscription, academic years, logo/tagline and other Super Admins. |
-| Admin | One academy | Everything except the subscription, academic years and logo/tagline. Cannot manage Super Admins. |
+| Super Admin | One academy | Everything in the academy, including the subscription, academic years, logo/tagline, the daily activity report and other Super Admins. |
+| Admin | One academy | Everything except the subscription, academic years, logo/tagline and the daily activity report. Cannot manage Super Admins. |
 | Accountant | One academy | Fees, refunds, discounts, expenses, payouts, faculty teaching time, reports. |
 | Staff | One academy | Students, online admissions, fee collection, test marks. Sees no expenses, payouts or totals. |
+| Faculty | One faculty member | Their own portal only: logs teaching time for approval, sees their own sessions and pay. Created from the Faculty screen; does not count towards the plan's user limit. |
 
 Endpoints require a *permission*; roles map to permissions in `server/Academy.Api/Infrastructure/Auth/Permissions.cs`.
 
@@ -24,7 +25,8 @@ Endpoints require a *permission*; roles map to permissions in `server/Academy.Ap
 
 Students and courses · fee payments with numbered, printable receipts · discounts, surcharges and refunds ·
 faculty and payouts · expenses · tests and report cards · dashboard · reports with CSV export ·
-email fee reminders · user management · activity log · online admission form with QR code · own logo and tagline.
+email fee reminders · user management · activity log · online admission form with QR code · own logo and tagline ·
+faculty portal with session approval · day/week/month reports and a daily activity report in Excel.
 
 Money entries are never edited or deleted. A mistake is **voided** with a reason and re-entered, so totals always reconcile.
 
@@ -63,6 +65,33 @@ each class as whole **minutes** (e.g. 85 min); pay = minutes × hourly rate ÷ 6
 onto each logged session, so changing it later never re-prices past classes. Owed = earned − paid for both kinds, and
 payouts cannot exceed it. A logged session that has already been paid for cannot be voided until the payout is voided.
 
+### Faculty portal
+
+A faculty member given a **portal login** (Faculty screen → *Give portal login*) signs in with the academy code and lands
+on their own portal (`/teacher`), built for a phone:
+
+- **Dashboard**: time taught and earned this month, sessions waiting for approval, payment pending, their subjects, and
+  their sessions by month with All / Waiting / Approved / Paid tabs, search, and a list of withdrawn and rejected ones.
+- **Log session**: date, in time and out time; minutes and pay are worked out from the hourly rate. Sessions cannot
+  overlap, cannot run past midnight and cannot be in the future. A session still waiting can be withdrawn.
+- **My payments**: unpaid, received, waiting approval, last payment; unpaid and paid sessions, payments received, rates.
+
+Submitted sessions wait in **Waiting for approval** on the Faculty screen, where staff with payout rights approve them or
+reject them with a reason the faculty member sees. Only approved sessions count towards pay. Payouts are not tied to
+sessions, so a session shows as *Paid* once payouts cover it, oldest first. Sessions logged before the portal existed
+count as approved.
+
+### Reports and the daily activity report
+
+**Reports** groups money in and out **day by day, week by week (Monday–Sunday) or month by month** within the chosen
+dates, and every download is an Excel workbook (CSV is still available with `?format=csv`). The summary workbook follows
+the grouping picked on screen.
+
+**Daily report** (Super Admin) lists everything that happened in a date range — admissions, online applications, fee
+payments, refunds, discounts and surcharges, expenses, faculty payouts, teaching time and tests — with who entered it,
+plus totals by day, week or month. *Download Excel* gives the same grouping on one sheet and every entry, with filters,
+on another. Voided money and rejected or withdrawn teaching time are listed but left out of totals. Times are Indian time.
+
 ## Academic years
 
 Each academy has its own year master (Super Admin → **Academic years**). A new academy starts with an April–March year;
@@ -72,7 +101,7 @@ passed it is locked. A switch at the top of every screen selects the year; the c
 | Follows the selected year | Not tied to a year |
 |---|---|
 | Students (by the year they were admitted) and their fee status | Courses (catalogue; counts shown are for the selected year) and subjects |
-| Payments, refunds, expenses, faculty payouts and teaching time (by date) | Faculty records, packages and hourly rates, what faculty are owed |
+| Payments, refunds, expenses, faculty payouts and teaching time (by date) | Faculty records, packages and hourly rates, what faculty are owed, the faculty portal (by month) and its approval queue |
 | | Online admission applications (approved ones join the selected year) |
 | Tests and report cards | Users, activity log, subscription |
 | Dashboard and reports | |

@@ -7,7 +7,7 @@ export interface Paged<T> {
   pageSize: number;
 }
 
-export type Role = 'Owner' | 'SuperAdmin' | 'Admin' | 'Accountant' | 'Staff';
+export type Role = 'Owner' | 'SuperAdmin' | 'Admin' | 'Accountant' | 'Staff' | 'Faculty';
 export type LedgerStatus = 'Posted' | 'Voided';
 
 export interface Session {
@@ -61,6 +61,11 @@ export const Permission = {
   YearsManage: 'years.manage',
   BrandingManage: 'branding.manage',
   AdmissionsManage: 'admissions.manage',
+  /** The staff workspace. Every academy role has it except a faculty portal login. */
+  Workspace: 'workspace.use',
+  FacultyPortal: 'faculty.portal',
+  /** The day-by-day activity report (Super Admin). */
+  ReportsActivity: 'reports.activity',
 } as const;
 
 // ---- Branding and admissions ----
@@ -268,7 +273,13 @@ export interface Faculty {
   /** Package amount, or the total of logged sessions for hourly faculty. */
   earned: number;
   paid: number;
+  /** Sessions the faculty member submitted from the portal that are waiting for approval. */
+  pendingSessions: number;
+  /** The faculty member's portal login, if they have one. */
+  login: { email: string; active: boolean } | null;
 }
+
+export type SessionReview = 'Approved' | 'Pending' | 'Rejected';
 
 export interface FacultySession {
   id: string;
@@ -283,6 +294,68 @@ export interface FacultySession {
   topic: string;
   status: LedgerStatus;
   voidReason: string | null;
+  /** "HH:mm:ss" when the faculty member entered in and out times. */
+  startTime: string | null;
+  endTime: string | null;
+  review: SessionReview;
+  reviewNote: string;
+}
+
+// ---- Faculty portal ----
+
+/** How a session looks to the faculty member who taught it. */
+export type PortalSessionState = 'Waiting' | 'Approved' | 'Paid' | 'Rejected' | 'Withdrawn';
+
+export interface PortalSession {
+  id: string;
+  taughtOn: string;
+  startTime: string | null;
+  endTime: string | null;
+  minutes: number;
+  hourlyRate: number;
+  amount: number;
+  subjectName: string | null;
+  topic: string;
+  state: PortalSessionState;
+  note: string | null;
+  loggedByStaff: boolean;
+}
+
+export interface PortalOverview {
+  faculty: { id: string; fullName: string; payType: FacultyPayType; hourlyRate: number; agreedPayout: number; active: boolean };
+  month: string;
+  thisMonth: { minutes: number; sessions: number; earned: number; waitingMinutes: number; waitingSessions: number };
+  totals: {
+    earned: number;
+    paid: number;
+    owed: number;
+    unpaidSessions: number;
+    waitingSessions: number;
+    waitingAmount: number;
+    lastPayout: { amount: number; paidOn: string; method: string } | null;
+  };
+  subjects: { id: string; name: string; active: boolean; courses: string[]; minutesThisMonth: number }[];
+}
+
+export interface PortalSessionList {
+  month: string;
+  counts: { all: number; waiting: number; approved: number; paid: number; removed: number };
+  items: PortalSession[];
+}
+
+export interface PortalPayments {
+  faculty: { fullName: string; payType: FacultyPayType; hourlyRate: number; agreedPayout: number };
+  unpaid: number;
+  unpaidSessions: number;
+  received: number;
+  paidSessions: number;
+  waitingAmount: number;
+  waitingSessions: number;
+  lastPayout: { id: string; amount: number; paidOn: string; method: string; notes: string } | null;
+  unpaidItems: PortalSession[];
+  paidItems: PortalSession[];
+  payouts: { id: string; amount: number; paidOn: string; method: string; notes: string }[];
+  rates: { hourlyRate: number; from: string; to: string; sessions: number }[];
 }
 
 export interface Payout {
@@ -398,8 +471,66 @@ export interface ReportSummary {
   netCash: number;
   byMethod: { method: string; amount: number; count: number }[];
   expensesByCategory: { category: string; amount: number; count: number }[];
-  months: { month: string; collections: number; expenses: number; payouts: number; net: number }[];
+  groupBy: ReportGrouping;
+  /** "Day by day", "Week by week" or "Month by month". */
+  title: string;
+  admissions: number;
+  periods: {
+    label: string;
+    from: string;
+    to: string;
+    admissions: number;
+    collections: number;
+    refunds: number;
+    collectionsNet: number;
+    expenses: number;
+    payouts: number;
+    net: number;
+  }[];
   courses: { courseName: string; students: number; payable: number; collected: number; pending: number }[];
+}
+
+export type ReportGrouping = 'Day' | 'Week' | 'Month';
+
+export interface ActivityTotals {
+  admissions: number;
+  applications: number;
+  collections: number;
+  refunds: number;
+  discounts: number;
+  surcharges: number;
+  expenses: number;
+  payouts: number;
+  teachingMinutes: number;
+  teachingPay: number;
+  tests: number;
+  netCash: number;
+}
+
+export interface ActivityEvent {
+  date: string;
+  /** Indian wall-clock time the entry was made, no zone. */
+  enteredAt: string;
+  type: string;
+  title: string;
+  detail: string;
+  amount: number | null;
+  /** "In", "Out" or "" for entries that are not cash. */
+  flow: string;
+  status: string;
+  by: string;
+}
+
+export interface ActivityReport {
+  from: string;
+  to: string;
+  groupBy: ReportGrouping;
+  title: string;
+  totals: ActivityTotals;
+  periods: { label: string; from: string; to: string; totals: ActivityTotals }[];
+  events: ActivityEvent[];
+  eventCount: number;
+  truncated: boolean;
 }
 
 export interface AppUser {

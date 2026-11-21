@@ -147,14 +147,36 @@ public sealed class Faculty : TenantEntity
     public bool Active { get; set; } = true;
 }
 
+/// <summary>Where a logged session stands. Only approved sessions count towards what a faculty member has earned.</summary>
+public enum SessionReview
+{
+    /// <summary>Logged by staff, or submitted by the faculty member and approved.</summary>
+    Approved,
+    /// <summary>Submitted by the faculty member from the portal; waiting for staff to check it.</summary>
+    Pending,
+    Rejected
+}
+
 /// <summary>
 /// Time an hourly faculty member taught. Time is kept in whole minutes, as academies record it ("85 min").
 /// The rate is copied from the faculty member, so a later rate change does not re-price past sessions.
-/// A ledger row: mistakes are voided, not edited.
+/// A ledger row: mistakes are voided, not edited. Sessions a faculty member submits from the portal
+/// carry their in and out times and wait for approval before they count.
 /// </summary>
 public sealed class FacultySession : LedgerEntry
 {
     public const int MaxMinutes = 24 * 60;
+
+    public SessionReview Review { get; set; } = SessionReview.Approved;
+    /// <summary>Class start and end, when the faculty member entered them. Minutes are worked out from these.</summary>
+    public TimeOnly? StartTime { get; set; }
+    public TimeOnly? EndTime { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTime? ReviewedAtUtc { get; set; }
+    public string ReviewNote { get; set; } = "";
+
+    /// <summary>True when the session counts towards pay.</summary>
+    public bool Counts => Status == LedgerStatus.Posted && Review == SessionReview.Approved;
 
     public Guid FacultyId { get; set; }
     public Faculty Faculty { get; set; } = null!;

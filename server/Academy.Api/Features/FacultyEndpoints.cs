@@ -21,6 +21,8 @@ public static class FacultyEndpoints
     public sealed record PayoutRequest(Guid FacultyId, decimal Amount, string? Method, DateOnly? PaidOn, string? Notes);
     public sealed record SessionRequest(Guid FacultyId, DateOnly? TaughtOn, int Minutes, string? Topic, Guid? SubjectId = null);
     public sealed record VoidRequest(string? Reason);
+    public sealed record ReviewRequest(string? Reason);
+    public sealed record LoginRequest(string? Email, string? Password);
 
     public sealed class PayoutListQuery : PageQuery
     {
@@ -32,6 +34,8 @@ public static class FacultyEndpoints
     public sealed class SessionListQuery : PageQuery
     {
         public Guid? FacultyId { get; set; }
+        /// <summary>Only sessions in this review state, e.g. Pending for the approval queue.</summary>
+        public SessionReview? Review { get; set; }
     }
 
     public static void MapFacultyEndpoints(this RouteGroupBuilder academy)
@@ -40,6 +44,8 @@ public static class FacultyEndpoints
         faculty.MapGet("", List).RequirePermission(Permissions.FacultyRead);
         faculty.MapPost("", Create).RequirePermission(Permissions.FacultyWrite);
         faculty.MapPut("/{id:guid}", Update).RequirePermission(Permissions.FacultyWrite);
+        // A portal login is an account, so it needs the same right as creating any other login.
+        faculty.MapPost("/{id:guid}/login", CreateLogin).RequirePermission(Permissions.UsersManage);
 
         var payouts = academy.MapGroup("/payouts");
         payouts.MapGet("", ListPayouts).RequirePermission(Permissions.PayoutsRead);
@@ -51,25 +57,31 @@ public static class FacultyEndpoints
         sessions.MapGet("", ListSessions).RequirePermission(Permissions.PayoutsRead);
         sessions.MapPost("", LogSession).RequirePermission(Permissions.PayoutsWrite);
         sessions.MapPost("/{id:guid}/void", VoidSession).RequirePermission(Permissions.LedgerCorrect);
+        sessions.MapPost("/{id:guid}/approve", ApproveSession).RequirePermission(Permissions.PayoutsWrite);
+        sessions.MapPost("/{id:guid}/reject", RejectSession).RequirePermission(Permissions.PayoutsWrite);
     }
 
     // ---- Balances ----
 
-    private static async Task<decimal> PaidToAsync(AcademyDbContext db, Guid facultyId, CancellationToken ct) =>
+    /// <summary>Sessions that count towards pay: not voided, and approved (staff-logged sessions are approved when logged).</summary>
+    internal static IQueryable<FacultySession> Counting(this IQueryable<FacultySession> sessions) =>
+        sessions.Where(s => s.Status == LedgerStatus.Posted && s.Review == SessionReview.Approved);
+
+    internal static async Task<decimal> PaidToAsync(AcademyDbContext db, Guid facultyId, CancellationToken ct) =>
         await db.FacultyPayouts.Where(p => p.FacultyId == facultyId && p.Status == LedgerStatus.Posted).SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
 
     private static async Task<decimal> SessionEarningsAsync(AcademyDbContext db, Guid facultyId, CancellationToken ct) =>
-        await db.FacultySessions.Where(s => s.FacultyId == facultyId && s.Status == LedgerStatus.Posted).SumAsync(s => (decimal?)s.Amount, ct) ?? 0;
+        await db.FacultySessions.Counting().Where(s => s.FacultyId == facultyId).SumAsync(s => (decimal?)s.Amount, ct) ?? 0;
 
-    private static async Task<decimal> EarnedAsync(AcademyDbContext db, Faculty faculty, CancellationToken ct) =>
+    internal static async Task<decimal> EarnedAsync(AcademyDbContext db, Faculty faculty, CancellationToken ct) =>
         faculty.PayType == FacultyPayType.Package ? faculty.AgreedPayout : await SessionEarningsAsync(db, faculty.Id, ct);
 
     /// <summary>Everything every faculty member has earned to date: packages plus logged hourly sessions.</summary>
     public static async Task<decimal> TotalEarnedAsync(AcademyDbContext db, CancellationToken ct)
     {
         var packages = await db.Faculty.Where(f => f.PayType == FacultyPayType.Package).SumAsync(f => (decimal?)f.AgreedPayout, ct) ?? 0;
-        var sessions = await db.FacultySessions
-            .Where(s => s.Status == LedgerStatus.Posted && s.Faculty.PayType == FacultyPayType.Hourly)
+        var sessions = await db.FacultySessions.Counting()
+            .Where(s => s.Faculty.PayType == FacultyPayType.Hourly)
             .SumAsync(s => (decimal?)s.Amount, ct) ?? 0;
         return packages + sessions;
     }
@@ -84,11 +96,17 @@ public static class FacultyEndpoints
                     .OrderBy(l => l.Subject.Name)
                     .Select(l => new { l.Subject.Id, l.Subject.Name, l.Subject.Code, l.Subject.Active })
                     .ToList(),
-                MinutesTaught = db.FacultySessions.Where(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted).Sum(s => (int?)s.Minutes) ?? 0,
+                MinutesTaught = db.FacultySessions
+                    .Where(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted && s.Review == SessionReview.Approved)
+                    .Sum(s => (int?)s.Minutes) ?? 0,
                 Earned = f.PayType == FacultyPayType.Package
                     ? f.AgreedPayout
-                    : db.FacultySessions.Where(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted).Sum(s => (decimal?)s.Amount) ?? 0,
-                Paid = db.FacultyPayouts.Where(p => p.FacultyId == f.Id && p.Status == LedgerStatus.Posted).Sum(p => (decimal?)p.Amount) ?? 0
+                    : db.FacultySessions
+                        .Where(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted && s.Review == SessionReview.Approved)
+                        .Sum(s => (decimal?)s.Amount) ?? 0,
+                Paid = db.FacultyPayouts.Where(p => p.FacultyId == f.Id && p.Status == LedgerStatus.Posted).Sum(p => (decimal?)p.Amount) ?? 0,
+                PendingSessions = db.FacultySessions.Count(s => s.FacultyId == f.Id && s.Status == LedgerStatus.Posted && s.Review == SessionReview.Pending),
+                Login = db.Users.Where(u => u.FacultyId == f.Id).Select(u => new { u.Email, u.Active }).FirstOrDefault()
             })
             .ToListAsync(ct));
 
@@ -213,16 +231,18 @@ public static class FacultyEndpoints
 
     private static async Task<IResult> ListSessions([AsParameters] SessionListQuery query, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var sessions = db.FacultySessions.AsNoTracking().Between(await years.GetAsync(ct), s => s.TaughtOn);
+        // The approval queue shows everything waiting, whichever year it falls in; the log follows the selected year.
+        var sessions = db.FacultySessions.AsNoTracking().Between(query.Review is null ? await years.GetAsync(ct) : null, s => s.TaughtOn);
         if (query.FacultyId is { } facultyId) sessions = sessions.Where(s => s.FacultyId == facultyId);
+        if (query.Review is { } review) sessions = sessions.Where(s => s.Review == review && s.Status == LedgerStatus.Posted);
 
         return Results.Ok(await sessions
             .OrderByDescending(s => s.TaughtOn).ThenByDescending(s => s.CreatedAtUtc)
             .Select(s => new
             {
-                s.Id, s.FacultyId, FacultyName = s.Faculty.FullName, s.TaughtOn, s.Minutes, s.HourlyRate, s.Amount, s.Topic,
+                s.Id, s.FacultyId, FacultyName = s.Faculty.FullName, s.TaughtOn, s.StartTime, s.EndTime, s.Minutes, s.HourlyRate, s.Amount, s.Topic,
                 s.SubjectId, SubjectName = s.Subject != null ? s.Subject.Name : null,
-                s.Status, s.VoidReason
+                s.Status, s.VoidReason, s.Review, s.ReviewNote
             })
             .ToPagedAsync(query, ct));
     }
@@ -273,7 +293,7 @@ public static class FacultyEndpoints
             var session = await db.FacultySessions.Include(s => s.Faculty).FirstAsync(s => s.Id == id, ct);
             if (session.Status == LedgerStatus.Voided) return ApiResults.Conflict("This entry is already voided.");
 
-            if (session.Faculty.PayType == FacultyPayType.Hourly)
+            if (session.Faculty.PayType == FacultyPayType.Hourly && session.Review == SessionReview.Approved)
             {
                 var earned = await SessionEarningsAsync(db, session.FacultyId, ct);
                 var paid = await PaidToAsync(db, session.FacultyId, ct);
@@ -285,5 +305,68 @@ public static class FacultyEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { success = true });
         }, ct);
+    }
+
+    // ---- Sessions submitted from the faculty portal ----
+
+    private static Task<IResult> ApproveSession(Guid id, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct) =>
+        ReviewAsync(id, SessionReview.Approved, null, db, currentUser, ct);
+
+    private static async Task<IResult> RejectSession(Guid id, ReviewRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    {
+        if (!Validate.Reason(request.Reason)) return ApiResults.Bad("Tell the faculty member why this session is rejected.");
+        return await ReviewAsync(id, SessionReview.Rejected, request.Reason!.Trim(), db, currentUser, ct);
+    }
+
+    private static Task<IResult> ReviewAsync(
+        Guid id, SessionReview decision, string? note, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct) =>
+        db.InTransactionAsync<IResult>(async () =>
+        {
+            var facultyId = await db.FacultySessions.Where(s => s.Id == id).Select(s => (Guid?)s.FacultyId).FirstOrDefaultAsync(ct);
+            if (facultyId is null || !await db.LockFacultyAsync(facultyId.Value, ct)) return Results.NotFound();
+
+            var session = await db.FacultySessions.FirstAsync(s => s.Id == id, ct);
+            if (session.Status == LedgerStatus.Voided) return ApiResults.Conflict("The faculty member withdrew this session.");
+            if (session.Review != SessionReview.Pending)
+                return ApiResults.Conflict($"This session was already {session.Review.ToString().ToLowerInvariant()}.");
+
+            session.Review = decision;
+            session.ReviewNote = note ?? "";
+            session.ReviewedByUserId = currentUser.UserId;
+            session.ReviewedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { session.Id, session.Review });
+        }, ct);
+
+    // ---- Portal login ----
+
+    private static async Task<IResult> CreateLogin(
+        Guid id, LoginRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser, CancellationToken ct)
+    {
+        if (!Validate.Email(request.Email)) return ApiResults.Bad("Enter the email address the faculty member will sign in with.");
+        if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
+
+        var faculty = await db.Faculty.FirstOrDefaultAsync(f => f.Id == id, ct);
+        if (faculty is null) return Results.NotFound();
+        if (await db.Users.AnyAsync(u => u.FacultyId == id, ct))
+            return ApiResults.Conflict($"{faculty.FullName} already has a login. Reset its password from the Users screen.");
+
+        var email = request.Email!.Trim().ToLowerInvariant();
+        if (await db.Users.AnyAsync(u => u.Email == email, ct)) return ApiResults.Conflict("That email already has an account.");
+
+        var user = new AppUser
+        {
+            TenantId = currentUser.TenantId,
+            Email = email,
+            DisplayName = faculty.FullName,
+            Role = Roles.Faculty,
+            FacultyId = faculty.Id,
+            MustChangePassword = true
+        };
+        sessions.SetPassword(user, request.Password!);
+        db.Users.Add(user);
+        if (faculty.Email.Length == 0) faculty.Email = email;
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/users/{user.Id}", new { user.Id });
     }
 }

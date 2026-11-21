@@ -1,8 +1,16 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { AcademicYearService } from '../../core/academic-year.service';
 import { Api, apiUrl, errorMessage } from '../../core/api';
-import { ReportSummary } from '../../core/models';
+import { AuthService } from '../../core/auth.service';
+import { Permission, ReportGrouping, ReportSummary } from '../../core/models';
 import { UI } from '../../shared/ui';
+import { RouterLink } from '@angular/router';
+
+export const GROUPINGS: { value: ReportGrouping; label: string }[] = [
+  { value: 'Day', label: 'Day by day' },
+  { value: 'Week', label: 'Week by week' },
+  { value: 'Month', label: 'Month by month' },
+];
 
 const EXPORTS = [
   { kind: 'payments', label: 'Payments and refunds' },
@@ -13,7 +21,7 @@ const EXPORTS = [
 
 @Component({
   selector: 'app-reports',
-  imports: [UI],
+  imports: [UI, RouterLink],
   template: `
     <div class="page-header">
       <div>
@@ -21,11 +29,19 @@ const EXPORTS = [
         <h1>Reports</h1>
         <p>Money in and out for the selected academic year (or the dates you choose), and what is still owed.</p>
       </div>
+      @if (canSeeActivity) {
+        <div class="page-actions"><a class="secondary" routerLink="/app/daily-report">◑ Daily activity report →</a></div>
+      }
     </div>
 
     <div class="filter-bar">
       <label class="inline">From <input type="date" [ngModel]="from()" (ngModelChange)="from.set($event); load()" /></label>
       <label class="inline">To <input type="date" [ngModel]="to()" (ngModelChange)="to.set($event); load()" /></label>
+      <div class="group-switch" role="group" aria-label="Group by">
+        @for (g of groupings; track g.value) {
+          <button type="button" [class.active]="groupBy() === g.value" (click)="groupBy.set(g.value); load()">{{ g.label }}</button>
+        }
+      </div>
     </div>
 
     @if (error()) {
@@ -42,15 +58,20 @@ const EXPORTS = [
       </div>
 
       <section class="surface">
-        <div class="surface-title"><h2>Month by month</h2></div>
+        <div class="surface-title">
+          <h2>{{ r.title }}</h2>
+          <a class="secondary" [href]="summaryExcelUrl()" download>⤓ Download Excel</a>
+        </div>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>MONTH</th><th>COLLECTIONS</th><th>EXPENSES</th><th>PAYOUTS</th><th>NET CASH</th><th></th></tr></thead>
+            <thead><tr><th>{{ r.groupBy === 'Day' ? 'DAY' : r.groupBy === 'Week' ? 'WEEK' : 'MONTH' }}</th><th>ADMISSIONS</th><th>COLLECTIONS</th><th>REFUNDS</th><th>EXPENSES</th><th>PAYOUTS</th><th>NET CASH</th><th></th></tr></thead>
             <tbody>
-              @for (m of r.months; track m.month) {
+              @for (m of r.periods; track m.from) {
                 <tr>
-                  <td><strong>{{ m.month }}</strong></td>
+                  <td><strong>{{ m.label }}</strong></td>
+                  <td>{{ m.admissions || '—' }}</td>
                   <td class="positive">{{ m.collections | money }}</td>
+                  <td>{{ m.refunds | money }}</td>
                   <td>{{ m.expenses | money }}</td>
                   <td>{{ m.payouts | money }}</td>
                   <td [class.negative]="m.net < 0">{{ m.net | money }}</td>
@@ -58,6 +79,12 @@ const EXPORTS = [
                 </tr>
               }
             </tbody>
+            <tfoot>
+              <tr>
+                <th>TOTAL</th><th>{{ r.admissions }}</th><th>{{ r.collections | money }}</th><th>{{ r.refunds | money }}</th>
+                <th>{{ r.expenses | money }}</th><th>{{ r.payouts | money }}</th><th>{{ r.netCash | money }}</th><th></th>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
@@ -102,8 +129,12 @@ const EXPORTS = [
 
       <section class="surface">
         <div class="surface-title"><h2>Download for Excel</h2></div>
-        <p class="muted">CSV files for the period above. Student fee status lists the selected year's students, as of today.</p>
+        <p class="muted">
+          Excel files for the period above. The summary follows the grouping you picked ({{ groupLabel() }}).
+          Student fee status lists the selected year's students, as of today.
+        </p>
         <div class="button-row">
+          <a class="primary" [href]="summaryExcelUrl()" download>⤓ Summary — {{ groupLabel() }}</a>
           @for (item of exports; track item.kind) {
             <a class="secondary" [href]="exportUrl(item.kind)" download>⤓ {{ item.label }}</a>
           }
@@ -120,19 +151,29 @@ export class ReportsComponent {
   protected readonly to = signal('');
   protected readonly report = signal<ReportSummary | null>(null);
   protected readonly error = signal('');
-  protected readonly highest = computed(() => Math.max(1, ...(this.report()?.months.map(m => m.collections) ?? [])));
+  protected readonly groupings = GROUPINGS;
+  protected readonly groupBy = signal<ReportGrouping>('Month');
+  protected readonly groupLabel = computed(() => GROUPINGS.find(g => g.value === this.groupBy())!.label.toLowerCase());
+  protected readonly canSeeActivity = inject(AuthService).can(Permission.ReportsActivity);
+  protected readonly highest = computed(() => Math.max(1, ...(this.report()?.periods.map(m => m.collections) ?? [])));
 
   constructor() {
     this.load();
   }
 
   protected load(): void {
-    this.api.get<ReportSummary>('reports/summary', { from: this.from(), to: this.to() }).subscribe({
+    this.api.get<ReportSummary>('reports/summary', { from: this.from(), to: this.to(), groupBy: this.groupBy() }).subscribe({
       next: report => {
         this.error.set('');
         this.report.set(report);
       },
       error: e => this.error.set(errorMessage(e)),
+    });
+  }
+
+  protected summaryExcelUrl(): string {
+    return apiUrl('reports/summary/excel', {
+      from: this.from(), to: this.to(), groupBy: this.groupBy(), academicYearId: this.years.selectedId(),
     });
   }
 

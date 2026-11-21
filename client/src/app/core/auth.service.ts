@@ -15,6 +15,8 @@ export class AuthService {
   readonly tenant = computed(() => this.session().tenant);
   readonly access = computed(() => this.session().access);
   readonly isOwner = computed(() => this.session().user?.role === 'Owner');
+  /** A faculty member's own login: it sees the faculty portal only. */
+  readonly isFaculty = computed(() => this.session().user?.role === 'Faculty');
   /** True when an academy user's subscription lets them use the product. */
   readonly hasAccess = computed(() => this.session().access?.allowed === true);
 
@@ -26,6 +28,7 @@ export class AuthService {
   homeUrl(): string {
     if (!this.session().authenticated) return '/';
     if (this.isOwner()) return '/platform';
+    if (this.isFaculty()) return this.hasAccess() ? '/teacher' : '/locked';
     if (this.hasAccess()) return '/app/dashboard';
     return this.can('billing.manage') ? '/app/billing' : '/locked';
   }
