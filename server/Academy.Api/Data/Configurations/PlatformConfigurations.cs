@@ -179,6 +179,7 @@ internal sealed class EmailMessageConfiguration : IEntityTypeConfiguration<Email
         e.Property(x => x.Category).HasMaxLength(40);
         e.Property(x => x.Status).IsEnumText();
         e.Property(x => x.LastError).HasMaxLength(1000);
+        e.Property(x => x.HtmlBody).HasColumnType("text");
     }
 }
 

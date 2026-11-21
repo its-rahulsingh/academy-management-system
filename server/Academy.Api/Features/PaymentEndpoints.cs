@@ -1,6 +1,8 @@
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
+using Academy.Api.Infrastructure.Billing;
+using Academy.Api.Infrastructure.Email;
 using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
@@ -28,9 +30,9 @@ public static class PaymentEndpoints
         group.MapGet("", List).RequirePermission(Permissions.PaymentsRead);
         group.MapGet("/summary", Summary).RequirePermission(Permissions.PaymentsRead);
         group.MapGet("/{id:guid}/receipt", Receipt).RequirePermission(Permissions.PaymentsRead);
-        group.MapPost("", (PaymentRequest r, AcademyDbContext db, CancellationToken ct) => Record(r, PaymentKind.Payment, db, ct))
+        group.MapPost("", (PaymentRequest r, AcademyDbContext db, EmailQueue emails, CancellationToken ct) => Record(r, PaymentKind.Payment, db, emails, ct))
             .RequirePermission(Permissions.PaymentsWrite);
-        group.MapPost("/refunds", (PaymentRequest r, AcademyDbContext db, CancellationToken ct) => Record(r, PaymentKind.Refund, db, ct))
+        group.MapPost("/refunds", (PaymentRequest r, AcademyDbContext db, EmailQueue emails, CancellationToken ct) => Record(r, PaymentKind.Refund, db, emails, ct))
             .RequirePermission(Permissions.LedgerCorrect);
         group.MapPost("/{id:guid}/void", Void).RequirePermission(Permissions.LedgerCorrect);
     }
@@ -84,7 +86,24 @@ public static class PaymentEndpoints
         return Results.Ok(new { received, refunded, net = received - refunded, thisMonth = month, count });
     }
 
-    private static async Task<IResult> Record(PaymentRequest request, PaymentKind kind, AcademyDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Emails the student their receipt (or refund, or cancellation notice) as part of the same save. Shows this payment,
+    /// paid to date and balance due only. Returns false when the student has no email address on record.
+    /// </summary>
+    internal static bool QueueReceipt(
+        EmailQueue emails, Guid? tenantId, StudentBalance student, StudentPayment payment, decimal paidToDate, decimal balanceDue, bool cancelled = false)
+    {
+        if (string.IsNullOrWhiteSpace(student.Email)) return false;
+        var kind = cancelled ? "Cancelled" : payment.Kind == PaymentKind.Refund ? "Refund" : "Payment";
+        var (subject, text, html) = EmailTemplates.Receipt(
+            kind, student.FullName, student.CourseName, StudentLedger.ReceiptLabel(payment.ReceiptNumber), Money.Format(payment.Amount, "INR"),
+            payment.PaidOn, payment.Method, Money.Format(Math.Max(0, paidToDate), "INR"), Money.Format(Math.Max(0, balanceDue), "INR"),
+            cancelled ? $"Reason: {payment.VoidReason}" : null);
+        emails.Enqueue(tenantId, student.Email, subject, text, "Receipt", html);
+        return true;
+    }
+
+    private static async Task<IResult> Record(PaymentRequest request, PaymentKind kind, AcademyDbContext db, EmailQueue emails, CancellationToken ct)
     {
         if (!Validate.Amount(request.Amount)) return ApiResults.Bad("Enter a positive amount with at most two decimals.");
         if (!PaymentMethods.IsValid(request.Method)) return ApiResults.Bad("Select a valid payment method.");
@@ -112,13 +131,15 @@ public static class PaymentEndpoints
                 Notes = Validate.Text(request.Notes, 1200)
             };
             db.StudentPayments.Add(payment);
+            var paidToDate = balance.Paid + (kind == PaymentKind.Payment ? request.Amount : -request.Amount);
+            var emailed = QueueReceipt(emails, db.CurrentTenantId, balance, payment, paidToDate, balance.Payable - paidToDate - balance.WrittenOff);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/payments/{payment.Id}",
-                new { payment.Id, receipt = StudentLedger.ReceiptLabel(payment.ReceiptNumber) });
+                new { payment.Id, receipt = StudentLedger.ReceiptLabel(payment.ReceiptNumber), emailed });
         }, ct);
     }
 
-    private static async Task<IResult> Void(Guid id, VoidRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    private static async Task<IResult> Void(Guid id, VoidRequest request, AcademyDbContext db, ICurrentUser currentUser, EmailQueue emails, CancellationToken ct)
     {
         if (!Validate.Reason(request.Reason)) return ApiResults.Bad("Give a reason for voiding this entry.");
 
@@ -137,8 +158,10 @@ public static class PaymentEndpoints
                 return ApiResults.Bad("Voiding this refund would leave the student overpaid.");
 
             payment.Void(currentUser.UserId, request.Reason!.Trim());
+            var paidToDate = balance.Paid + (payment.Kind == PaymentKind.Payment ? -payment.Amount : payment.Amount);
+            var emailed = QueueReceipt(emails, db.CurrentTenantId, balance, payment, paidToDate, balance.Payable - paidToDate - balance.WrittenOff, cancelled: true);
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new { success = true });
+            return Results.Ok(new { success = true, emailed });
         }, ct);
     }
 
@@ -170,7 +193,6 @@ public static class PaymentEndpoints
             payment.Kind, payment.Amount, payment.Method, payment.PaidOn, payment.Notes, payment.Status, payment.VoidReason,
             payment.StudentName, payment.StudentPhone, payment.RecordedBy,
             courseName = balance.CourseName,
-            feePayable = balance.Payable,
             totalPaid = balance.Paid,
             balanceDue = balance.Pending
         });

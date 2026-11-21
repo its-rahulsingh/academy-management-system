@@ -20,7 +20,8 @@ Stack: Angular 21 · ASP.NET Core 10 · PostgreSQL · one Docker container (Rend
 | Faculty | One faculty member | Their own portal only: clocks in and out of classes, sees their own sessions and pay. Created from the Faculty screen. |
 | Student | One student | Their own portal only: fees, receipts, subjects and test results. Created from the student record. |
 
-Faculty and student logins do not count towards the plan's user limit. Passwords need at least 5 characters; five
+Faculty and student logins do not count towards the plan's user limit. Every new login is emailed its sign-in details and
+starting password, and must choose its own password before it can do anything else. Passwords need at least 5 characters; five
 wrong attempts lock an account for 15 minutes.
 
 Endpoints require a *permission*; roles map to permissions in `server/Academy.Api/Infrastructure/Auth/Permissions.cs`.
@@ -92,15 +93,32 @@ when it ends; the server's clock gives the minutes, and a live timer runs for th
 - **Forgot to clock in:** the faculty member enters the date, start and end times and a reason (up to 31 days back).
   It is marked as a manual request and always needs approval; it cannot overlap another class.
 - **Classes running now**, with live timers, is on the dashboard and the Class check-in page for Admins and Super Admins.
-- Package faculty clock in and out too; their classes are recorded as attendance at no extra pay.
+- Package faculty clock in and out too; their classes are recorded as attendance at no extra pay, approved
+  automatically unless the academy turns that off. Their portal shows time taught, days present and package balance.
+- **Faculty → Attendance** shows each faculty member's days present, classes and time for a month, with an Excel download.
 - The portal also has the month's figures, sessions by month (All / Waiting / Approved / Paid), and **My payments**.
   Payouts are not tied to sessions, so a session shows as *Paid* once payouts cover it, oldest first.
 
 ### Student portal
 
 A student given a **portal login** (student record → *Give portal login*) signs in with the academy code and sees
-(`/student`) their course and year, fee, discounts, paid and balance due, every receipt (printable), their subjects
-and who teaches them, latest test results and the full report card. Nothing else, and only their own records.
+(`/student`) their course and year, their subjects and who teaches them, latest test results and the full report card.
+**Nothing about money**: the agreed fee and any discount stay with the office. Instead, whenever a payment or refund is
+recorded (or voided), the student is **emailed a receipt** showing that payment, paid to date and balance due, sent as
+the academy. Students without an email on record get no email; the office receipt can still be printed.
+
+### Fees: settling the last instalment
+
+**Settle balance** on a student's record records the final payment (if any) and writes off the rest, with a reason.
+The student becomes **Settled**: nothing is due, reminders stop, and the student is not told the written-off amount.
+Write-offs are reported separately from discounts (reports, Daily report, Excel) and can be voided if made by mistake.
+
+### Promote to next year
+
+**Students → Promote to next year**: pick the year (and course), tick the continuing students and set each one's new
+course and fee. Each gets a new record in the next year, linked to last year's; the old record becomes inactive but keeps
+its payments, and anything still unpaid there is shown on the new record and stays collectable. The student's portal
+login moves to the new record and their report card covers both years. Others can be marked inactive in the same step.
 
 ### Reports and the daily activity report
 

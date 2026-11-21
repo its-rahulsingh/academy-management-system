@@ -22,6 +22,11 @@ import { UI } from '../../shared/ui';
       A class running longer than this always needs approval (even when clocked by QR), and the faculty member is emailed a reminder to clock out.
       Classes still running at midnight are closed automatically and are not paid until someone enters when they ended.
     </div>
+    <label class="check gap-top"><input type="checkbox" [(ngModel)]="autoApprovePackage" /> Approve package faculty's classes automatically</label>
+    <div class="helper">
+      Package faculty are not paid per class, so their QR or location clock-ins are taken as attendance without a review.
+      Over-long classes, times typed in by hand and forgotten clock-in requests still wait for approval.
+    </div>
     <h3 class="section-title">Location (when no admin is free)</h3>
     <p class="muted">
       Faculty normally clock in by scanning the QR code on <b>Class check-in</b>. When no admin is free, they can clock in
@@ -62,6 +67,7 @@ export class LocationSettingsComponent {
   protected longitude: number | null = null;
   protected radius = 150;
   protected maxClassMinutes = 180;
+  protected autoApprovePackage = true;
   protected readonly maxOptions = [60, 90, 120, 150, 180, 240, 300, 360, 480];
 
   constructor() {
@@ -76,6 +82,7 @@ export class LocationSettingsComponent {
     this.longitude = s.longitude;
     this.radius = s.radiusMeters;
     this.maxClassMinutes = s.maxClassMinutes;
+    this.autoApprovePackage = s.autoApprovePackageClasses;
     if (!this.maxOptions.includes(s.maxClassMinutes)) this.maxOptions.push(s.maxClassMinutes);
     this.enabled.set(s.enabled);
   }
@@ -113,6 +120,7 @@ export class LocationSettingsComponent {
     this.error.set('');
     this.api.put<AttendanceSettings>('attendance/settings', {
       latitude, longitude, radiusMeters: Number(this.radius), maxClassMinutes: Number(this.maxClassMinutes),
+      autoApprovePackageClasses: this.autoApprovePackage,
     }).subscribe({
       next: s => {
         this.busy.set(false);

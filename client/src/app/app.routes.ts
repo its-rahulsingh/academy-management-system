@@ -22,6 +22,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', canActivate: [requires()], loadComponent: () => import('./features/academy/dashboard').then(m => m.DashboardComponent) },
       { path: 'students', canActivate: [requires(Permission.StudentsRead)], loadComponent: () => import('./features/academy/students').then(m => m.StudentsComponent) },
+      { path: 'students/promote', canActivate: [requires(Permission.StudentsWrite)], loadComponent: () => import('./features/academy/promote').then(m => m.PromoteComponent) },
       { path: 'admissions', canActivate: [requires(Permission.AdmissionsManage)], loadComponent: () => import('./features/academy/admissions').then(m => m.AdmissionsComponent) },
       { path: 'profile', canActivate: [requires(Permission.BrandingManage)], loadComponent: () => import('./features/academy/branding').then(m => m.BrandingPageComponent) },
       { path: 'courses', canActivate: [requires(Permission.CoursesRead)], loadComponent: () => import('./features/academy/courses').then(m => m.CoursesComponent) },
@@ -64,7 +65,6 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('./features/student/student-dashboard').then(m => m.StudentDashboardComponent) },
       { path: 'report-card', data: { portal: true }, loadComponent: () => import('./features/academy/report-card').then(m => m.ReportCardComponent) },
-      { path: 'receipts/:id', data: { portal: true }, loadComponent: () => import('./features/academy/receipt').then(m => m.ReceiptComponent) },
     ],
   },
   {

@@ -17,6 +17,8 @@ public static class AppClaims
 {
     public const string TenantId = "tenant_id";
     public const string SecurityStamp = "security_stamp";
+    /// <summary>Present while the account still has a password an administrator set (or emailed).</summary>
+    public const string MustChangePassword = "must_change_password";
 }
 
 public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser

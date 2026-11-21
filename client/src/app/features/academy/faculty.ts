@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
+import { Api, FormState, Notify, PagedList, apiUrl, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { Faculty, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission, SubjectRef } from '../../core/models';
+import { Faculty, FacultyAttendance, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission, SubjectRef } from '../../core/models';
 import { UI, today } from '../../shared/ui';
 import { clock } from '../teacher/teacher-dashboard';
 import { SubjectPickerComponent } from './subjects';
@@ -100,7 +100,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
                 @if (f.payType === 'Hourly') {
                   <strong>{{ f.hourlyRate | money }} / hour</strong><small>{{ f.minutesTaught }} min approved{{ f.pendingSessions ? ' · ' + f.pendingSessions + ' waiting' : '' }}</small>
                 } @else {
-                  <strong>Package</strong><small>{{ f.agreedPayout | money }}</small>
+                  <strong>Package</strong><small>{{ f.agreedPayout | money }}{{ f.minutesTaught ? ' · ' + f.minutesTaught + ' min attended' : '' }}</small>
                 }
               </td>
               <td>{{ f.earned | money }}</td>
@@ -128,6 +128,35 @@ function sessionPay(minutes: number, hourlyRate: number): number {
         </tbody>
       </table>
     </div>
+
+    <section class="surface gap-top">
+      <div class="surface-title">
+        <h2>Attendance</h2>
+        <div class="button-row tight">
+          <input type="month" [ngModel]="attendanceMonth()" (ngModelChange)="loadAttendance($event)" aria-label="Month" />
+          <a class="secondary" [href]="attendanceExcelUrl()" download>⤓ Excel</a>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>FACULTY</th><th>DAYS PRESENT</th><th>CLASSES</th><th>TIME TAUGHT</th><th>WAITING</th></tr></thead>
+          <tbody>
+            @for (a of attendance(); track a.facultyId) {
+              <tr [class.dimmed]="!a.active">
+                <td><strong>{{ a.name }}</strong><small>{{ a.payType === 'Package' ? 'Package' : 'Hourly' }}</small></td>
+                <td>{{ a.days }}</td>
+                <td>{{ a.classes }}</td>
+                <td>{{ hours(a.minutes) }}</td>
+                <td>{{ a.waiting || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="empty">No classes this month.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="helper">Approved classes only; classes still waiting for approval are counted separately.</p>
+    </section>
 
     @if (can(permission.PayoutsRead) && (hourly().length || sessions.total())) {
       <section class="surface gap-top">
@@ -309,7 +338,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
         <input id="loginEmail" type="email" [(ngModel)]="loginModel.email" autocomplete="off" />
         <label for="loginPassword">Initial password * (at least 5 characters)</label>
         <input id="loginPassword" type="password" autocomplete="new-password" [(ngModel)]="loginModel.password" />
-        <div class="helper">Share it privately. They must choose their own password at first sign-in. Reset it later from the Users screen.</div>
+        <div class="helper">It is emailed to them with the sign-in details. They must choose their own password at first sign-in. Reset it later from the Users screen.</div>
       </app-modal>
     }
 
@@ -359,6 +388,8 @@ export class FacultyComponent {
     this.api.get<Paged<FacultySession>>('faculty-sessions', { page, pageSize, review: 'Pending' }),
   );
   protected readonly reviewing = signal(false);
+  protected readonly attendanceMonth = signal(today().slice(0, 7));
+  protected readonly attendance = signal<FacultyAttendance['items']>([]);
   protected readonly rejectTarget = signal<FacultySession | null>(null);
   protected readonly login = new FormState();
   protected loginModel = { facultyId: '', name: '', email: '', password: '' };
@@ -389,6 +420,7 @@ export class FacultyComponent {
       this.sessions.load();
     }
     if (this.can(Permission.PayoutsWrite)) this.waiting.load();
+    this.loadAttendance(this.attendanceMonth());
   }
 
   private blank() {
@@ -400,6 +432,26 @@ export class FacultyComponent {
 
   protected subjectNames(f: Faculty): string {
     return f.subjects.map(s => s.name).join(', ');
+  }
+
+  protected loadAttendance(month: string): void {
+    if (!month) return;
+    this.attendanceMonth.set(month);
+    this.api.get<FacultyAttendance>('faculty/attendance', { month }).subscribe({
+      next: a => this.attendance.set(a.items),
+      error: e => this.error.set(errorMessage(e)),
+    });
+  }
+
+  protected attendanceExcelUrl(): string {
+    return apiUrl('faculty/attendance/excel', { month: this.attendanceMonth() });
+  }
+
+  /** 135 → "2 h 15 min". */
+  protected hours(minutes: number): string {
+    if (!minutes) return '—';
+    const h = Math.floor(minutes / 60);
+    return h ? `${h} h${minutes % 60 ? ' ' + (minutes % 60) + ' min' : ''}` : `${minutes} min`;
   }
 
   protected sessionLabel(s: FacultySession): string {

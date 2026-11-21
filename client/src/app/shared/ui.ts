@@ -46,7 +46,7 @@ export function initials(name: string | null | undefined): string {
 @Component({
   selector: 'app-modal',
   template: `
-    <div class="modal-backdrop" (click)="closed.emit()">
+    <div class="modal-backdrop" [style.z-index]="layer" (click)="closed.emit()">
       <section class="modal" [class.modal-wide]="wide()" role="dialog" aria-modal="true" [attr.aria-label]="title()" (click)="$event.stopPropagation()">
         <header class="modal-header">
           <h2>{{ title() }}</h2>
@@ -71,6 +71,13 @@ export function initials(name: string | null | undefined): string {
   `,
 })
 export class ModalComponent {
+  /**
+   * Each dialog opens above every dialog already open (e.g. "Give portal login" from inside a student's details),
+   * whatever order they appear in the page's template.
+   */
+  private static nextLayer = 1000;
+  protected readonly layer = ++ModalComponent.nextLayer;
+
   readonly title = input.required<string>();
   readonly error = input('');
   readonly busy = input(false);
@@ -146,6 +153,7 @@ export class StatusComponent {
       case 'Sent':
       case 'Current':
       case 'Approved':
+      case 'Settled':
         return 'good';
       case 'Partial':
       case 'Trialing':

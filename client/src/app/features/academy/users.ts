@@ -80,7 +80,7 @@ const ROLE_HELP: Record<string, string> = {
         @if (!model.id) {
           <label for="password">Initial password * (at least 5 characters)</label>
           <input id="password" type="password" autocomplete="new-password" [(ngModel)]="model.password" />
-          <div class="helper">Share it privately. The user must choose their own password at first sign-in.</div>
+          <div class="helper">It is emailed to the user with the sign-in details. They must choose their own password at first sign-in.</div>
         }
       </app-modal>
     }
@@ -89,7 +89,7 @@ const ROLE_HELP: Record<string, string> = {
       <app-modal [title]="'Reset password — ' + passwordFor()?.displayName" saveLabel="Set password" [busy]="password.busy()" [error]="password.error()" (closed)="password.close()" (saved)="savePassword()">
         <label for="newPassword">New password * (at least 5 characters)</label>
         <input id="newPassword" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
-        <div class="helper">This signs the user out everywhere. They must choose their own password at next sign-in.</div>
+        <div class="helper">This signs the user out everywhere and emails them the new password. They must choose their own password at next sign-in.</div>
       </app-modal>
     }
   `,

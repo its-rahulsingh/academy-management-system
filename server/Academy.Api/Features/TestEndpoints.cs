@@ -99,10 +99,13 @@ public static class TestEndpoints
             })
             .FirstOrDefaultAsync(ct);
         if (student is null) return Results.NotFound();
+        // A promoted student's card includes the tests from their earlier years too.
+        var records = await PromotionEndpoints.EarlierRecordsAsync(db, studentId, ct);
+        records.Add(studentId);
 
         // Rank and class average are worked out in SQL per test, so this stays one query however large the class.
         var rows = await db.TestResults.AsNoTracking()
-            .Where(r => r.StudentId == studentId)
+            .Where(r => records.Contains(r.StudentId))
             .OrderBy(r => r.Test.TestDate).ThenBy(r => r.Test.Title)
             .Select(r => new
             {

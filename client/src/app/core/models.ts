@@ -191,8 +191,10 @@ export interface Student {
   surcharges: number;
   payable: number;
   paid: number;
+  /** Given up in a final settlement. */
+  writtenOff: number;
   pending: number;
-  status: 'Paid' | 'Partial' | 'Pending';
+  status: 'Paid' | 'Partial' | 'Pending' | 'Settled';
 }
 
 export interface StudentLookup {
@@ -230,6 +232,8 @@ export interface FeeAdjustment {
 
 export interface StudentDetail {
   student: Student;
+  /** For a promoted student: earlier years' records and what is still unpaid there. */
+  previousYears: { id: string; academicYearName: string; courseName: string; due: number; status: string }[];
   /** The student's portal login, if they have one. */
   login: { email: string; active: boolean } | null;
   payments: Omit<Payment, 'studentId' | 'studentName'>[];
@@ -250,7 +254,6 @@ export interface Receipt {
   studentPhone: string;
   recordedBy: string | null;
   courseName: string;
-  feePayable: number;
   totalPaid: number;
   balanceDue: number;
 }
@@ -368,6 +371,25 @@ export interface AttendanceSettings {
   radiusMeters: number;
   enabled: boolean;
   maxClassMinutes: number;
+  /** Package faculty's QR or location classes are approved without a review. */
+  autoApprovePackageClasses: boolean;
+}
+
+export interface FacultyAttendance {
+  month: string;
+  from: string;
+  to: string;
+  items: { facultyId: string; name: string; payType: FacultyPayType; active: boolean; classes: number; minutes: number; days: number; waiting: number }[];
+}
+
+export interface PromotionCandidates {
+  years: { id: string; name: string; startDate: string; endDate: string; isClosed: boolean }[];
+  from: { id: string; name: string };
+  to: { id: string; name: string; startDate: string } | null;
+  courses: { id: string; name: string; fee: number }[];
+  students: {
+    id: string; fullName: string; courseId: string; courseName: string; feeAmount: number; active: boolean; due: number; promotedTo: string | null;
+  }[];
 }
 
 // ---- Student portal ----
@@ -376,10 +398,7 @@ export interface StudentPortalOverview {
   student: {
     id: string; fullName: string; email: string; phone: string; courseName: string; academicYearName: string; admissionDate: string; active: boolean;
   };
-  fees: { feeAmount: number; discounts: number; surcharges: number; payable: number; paid: number; pending: number; status: string };
   subjects: { name: string; faculty: string[] }[];
-  payments: { id: string; kind: 'Payment' | 'Refund'; receipt: string; amount: number; method: string; paidOn: string }[];
-  adjustments: { kind: 'Discount' | 'Surcharge'; amount: number; reason: string; createdAtUtc: string }[];
   recentTests: { title: string; subject: string; testDate: string; marks: number; maxMarks: number; percent: number }[];
 }
 
@@ -406,7 +425,7 @@ export interface PortalSession {
 export interface PortalOverview {
   faculty: { id: string; fullName: string; payType: FacultyPayType; hourlyRate: number; agreedPayout: number; active: boolean };
   month: string;
-  thisMonth: { minutes: number; sessions: number; earned: number; waitingMinutes: number; waitingSessions: number };
+  thisMonth: { minutes: number; sessions: number; days: number; earned: number; waitingMinutes: number; waitingSessions: number };
   totals: {
     earned: number;
     paid: number;

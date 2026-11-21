@@ -78,13 +78,15 @@ public sealed class AppOptions
 /// <summary>Queues an email as part of the caller's unit of work. Nothing is sent until the caller saves.</summary>
 public sealed class EmailQueue(AcademyDbContext db)
 {
-    public void Enqueue(Guid? tenantId, string to, string subject, string body, string category) =>
+    /// <param name="html">The formatted content; when omitted it is made from the plain text.</param>
+    public void Enqueue(Guid? tenantId, string to, string subject, string body, string category, string? html = null) =>
         db.EmailMessages.Add(new EmailMessage
         {
             TenantId = tenantId,
             ToAddress = to.Trim(),
             Subject = subject,
             Body = body,
+            HtmlBody = html ?? EmailHtml.FromText(body),
             Category = category
         });
 }
@@ -109,7 +111,9 @@ public sealed class SmtpEmailTransport(IOptions<EmailOptions> options) : IEmailT
         if (sender?.ReplyTo is { } replyTo) mime.ReplyTo.Add(MailboxAddress.Parse(replyTo));
         mime.To.Add(MailboxAddress.Parse(message.ToAddress));
         mime.Subject = message.Subject;
-        mime.Body = new TextPart("plain") { Text = message.Body };
+        var parts = new BodyBuilder { TextBody = message.Body };
+        if (message.HtmlBody is { } html) parts.HtmlBody = EmailHtml.Page(sender?.FromName ?? settings.FromName, message.Subject, html);
+        mime.Body = parts.ToMessageBody();
 
         using var client = new SmtpClient();
         await client.ConnectAsync(settings.Host, settings.Port, SecureSocketOptions.Auto, ct);
@@ -137,6 +141,7 @@ public sealed class ResendEmailTransport(HttpClient http, IOptions<EmailOptions>
             ["subject"] = message.Subject,
             ["text"] = message.Body
         };
+        if (message.HtmlBody is { } html) payload["html"] = EmailHtml.Page(sender?.FromName ?? settings.FromName, message.Subject, html);
         if (sender?.ReplyTo is { } replyTo) payload["reply_to"] = replyTo;
 
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint) { Content = JsonContent.Create(payload) };
@@ -171,6 +176,7 @@ public sealed class BrevoEmailTransport(HttpClient http, IOptions<EmailOptions> 
             ["subject"] = message.Subject,
             ["textContent"] = message.Body
         };
+        if (message.HtmlBody is { } html) payload["htmlContent"] = EmailHtml.Page(sender?.FromName ?? settings.FromName, message.Subject, html);
         if (sender?.ReplyTo is { } replyTo) payload["replyTo"] = new { email = replyTo, name = sender.FromName };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint) { Content = JsonContent.Create(payload) };
@@ -287,9 +293,56 @@ public static class EmailTemplates
         "Reset your AcademyFlow password",
         $"Hello {name},\n\nUse the link below to choose a new password. It works once and expires in 60 minutes.\n\n{link}\n\nIf you did not ask for this, you can ignore this email.\n");
 
-    public static (string Subject, string Body) Welcome(string name, string academy, string code, string email, string link) => (
-        $"Your AcademyFlow account for {academy}",
-        $"Hello {name},\n\nAn account has been created for you at {academy}.\n\nSign in at: {link}\nAcademy code: {code}\nEmail: {email}\n\nYour administrator will share your initial password privately. You will be asked to change it when you first sign in.\n");
+    public static (string Subject, string Body) Welcome(
+        string name, string academy, string code, string email, string password, string link, string purpose) => (
+        $"Your account at {academy}",
+        $"Hello {name},\n\nAn account has been created for you at {academy}.{(purpose.Length > 0 ? " " + purpose : "")}\n\n"
+        + $"Sign in at: {link}\nAcademy code: {code}\nEmail: {email}\nStarting password: {password}\n\n"
+        + "When you first sign in you must choose a new password of your own. The starting password then stops working.\n"
+        + "Please do not share this email with anyone.\n");
+
+    public static (string Subject, string Body) PasswordSet(string name, string academy, string code, string email, string password, string link) => (
+        $"Your password at {academy} was reset",
+        $"Hello {name},\n\nAn administrator at {academy} has set a new password for your account.\n\n"
+        + $"Sign in at: {link}\nAcademy code: {code}\nEmail: {email}\nNew password: {password}\n\n"
+        + "When you sign in you must choose a new password of your own. If you did not expect this, contact your academy.\n");
+
+    /// <summary>
+    /// What a student is emailed when money is received, refunded, or a receipt is cancelled. It shows this payment,
+    /// what has been paid so far and what is still due; never the agreed fee or any discount.
+    /// </summary>
+    public static (string Subject, string Text, string Html) Receipt(
+        string kind, string student, string course, string receipt, string amount, DateOnly date, string method,
+        string paidToDate, string balanceDue, string? note = null)
+    {
+        var (subject, heading, lead) = kind switch
+        {
+            "Refund" => ($"Refund issued ({receipt})", "Refund", $"We have refunded {amount} to you."),
+            "Cancelled" => ($"Receipt {receipt} cancelled", "Receipt cancelled", $"Receipt {receipt} for {amount} has been cancelled and no longer counts towards your fees."),
+            _ => ($"Payment received ({receipt})", "Payment receipt", $"We have received {amount}. Thank you.")
+        };
+        var rows = new List<(string Label, string Value, bool Strong)>
+        {
+            ("Receipt no.", receipt, false),
+            ("Date", date.ToString("dd MMM yyyy"), false),
+            ("Student", student, false),
+            ("Course", course, false),
+            (kind == "Refund" ? "Amount refunded" : "Amount", amount, true),
+            ("Method", method, false),
+            ("Paid to date", paidToDate, false),
+            ("Balance due", balanceDue, true)
+        };
+        var text = $"Dear {student},\n\n{lead}\n\n"
+                   + string.Join("\n", rows.Select(r => $"{r.Label}: {r.Value}"))
+                   + (note is null ? "" : $"\n\n{note}")
+                   + "\n\nIf anything looks wrong, reply to this email.\n";
+        var html = $"<h2 style=\"margin:0 0 6px;font-size:20px;color:#1f2238\">{EmailHtml.Encode(heading)}</h2>"
+                   + $"<p style=\"margin:0 0 14px;line-height:1.55\">Dear {EmailHtml.Encode(student)},<br>{EmailHtml.Encode(lead)}</p>"
+                   + EmailHtml.Table(rows)
+                   + (note is null ? "" : $"<p style=\"margin:0 0 14px;line-height:1.55\">{EmailHtml.Encode(note)}</p>")
+                   + "<p style=\"margin:0 0 14px;color:#6d7186;font-size:12px\">If anything looks wrong, simply reply to this email.</p>";
+        return (subject, text, html);
+    }
 
     public static (string Subject, string Body) FeeReminder(string student, string academy, string course, string pending) => (
         $"Fee reminder from {academy}",

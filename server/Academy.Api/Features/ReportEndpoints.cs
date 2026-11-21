@@ -11,11 +11,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Features;
 
 /// <summary>Fee position of one course. Built from grouped SQL so it stays cheap as student numbers grow.</summary>
-public sealed record CourseFinance(Guid CourseId, string CourseName, int Students, decimal Fees, decimal Discounts, decimal Surcharges, decimal Received, decimal Refunded)
+public sealed record CourseFinance(
+    Guid CourseId, string CourseName, int Students, decimal Fees, decimal Discounts, decimal Surcharges, decimal Received, decimal Refunded,
+    decimal WrittenOff = 0)
 {
     public decimal Payable => Math.Max(0, Fees - Discounts + Surcharges);
     public decimal Collected => Received - Refunded;
-    public decimal Pending => Math.Max(0, Payable - Collected);
+    public decimal Pending => Math.Max(0, Payable - Collected - WrittenOff);
 }
 
 public static class FinanceQueries
@@ -45,7 +47,8 @@ public static class FinanceQueries
             adjustments.Where(a => a.CourseId == c.Id && a.Kind == AdjustmentKind.Discount).Sum(a => a.Amount),
             adjustments.Where(a => a.CourseId == c.Id && a.Kind == AdjustmentKind.Surcharge).Sum(a => a.Amount),
             payments.Where(p => p.CourseId == c.Id && p.Kind == PaymentKind.Payment).Sum(p => p.Amount),
-            payments.Where(p => p.CourseId == c.Id && p.Kind == PaymentKind.Refund).Sum(p => p.Amount))).ToList();
+            payments.Where(p => p.CourseId == c.Id && p.Kind == PaymentKind.Refund).Sum(p => p.Amount),
+            adjustments.Where(a => a.CourseId == c.Id && a.Kind == AdjustmentKind.WriteOff).Sum(a => a.Amount))).ToList();
     }
 }
 
@@ -84,7 +87,7 @@ public static class DashboardEndpoints
         var earlierDues = year is null ? 0 : await db.StudentBalances()
             .Where(s => s.AcademicYearId != year.Id && db.AcademicYears.Any(y => y.Id == s.AcademicYearId && y.StartDate < year.Start))
             .WithStatus("Due")
-            .SumAsync(s => (decimal?)(s.FeeAmount - s.Discounts + s.Surcharges - (s.Received - s.Refunded)), ct) ?? 0;
+            .SumAsync(s => (decimal?)(s.FeeAmount - s.Discounts + s.Surcharges - (s.Received - s.Refunded) - s.WrittenOff), ct) ?? 0;
         var recent = await db.StudentPayments.AsNoTracking()
             .Where(p => p.Status == LedgerStatus.Posted).Between(year, p => p.PaidOn)
             .OrderByDescending(p => p.PaidOn).ThenByDescending(p => p.ReceiptNumber)
@@ -218,7 +221,7 @@ public static class ReportEndpoints
                 p.Label, p.From, p.To, p.Admissions, p.Collections, p.Refunds, collectionsNet = p.NetCollections, p.Expenses, p.Payouts, p.Net
             }),
             // Outstanding fees are a position as of now for the selected year's students, not a flow within the date range.
-            courses = r.Courses.Select(c => new { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending })
+            courses = r.Courses.Select(c => new { c.CourseName, c.Students, c.Payable, c.Collected, c.WrittenOff, c.Pending })
         });
     }
 
@@ -247,8 +250,8 @@ public static class ReportEndpoints
             r.ByMethod.Select(m => new object?[] { m.Method, m.Count, m.Amount }), new HashSet<int> { 2 });
         Excel.Sheet(book, "Expenses by category", ["Category", "Entries", "Amount"],
             r.ByCategory.Select(c => new object?[] { c.Category, c.Count, c.Amount }), new HashSet<int> { 2 });
-        Excel.Sheet(book, "Fees by course", ["Course", "Students", "Payable", "Collected", "Pending"],
-            r.Courses.Select(c => new object?[] { c.CourseName, c.Students, c.Payable, c.Collected, c.Pending }), new HashSet<int> { 2, 3, 4 });
+        Excel.Sheet(book, "Fees by course", ["Course", "Students", "Payable", "Collected", "Written off", "Pending"],
+            r.Courses.Select(c => new object?[] { c.CourseName, c.Students, c.Payable, c.Collected, c.WrittenOff, c.Pending }), new HashSet<int> { 2, 3, 4, 5 });
 
         return Excel.File(book, $"summary-{start:yyyyMMdd}-{end:yyyyMMdd}-{grouping.ToString().ToLowerInvariant()}.xlsx");
     }
@@ -304,15 +307,15 @@ public static class ReportEndpoints
 
             case "students":
                 title = "Student fee status";
-                headers = ["Student", "Academic year", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Pending", "Status", "Active"];
-                money = new HashSet<int> { 6, 7, 8, 9, 10, 11 };
+                headers = ["Student", "Academic year", "Email", "Phone", "Course", "Admission", "Fee", "Discounts", "Surcharges", "Payable", "Paid", "Written off", "Pending", "Status", "Active"];
+                money = new HashSet<int> { 6, 7, 8, 9, 10, 11, 12 };
                 rows = (await db.StudentBalances()
                     .Where(s => year == null || s.AcademicYearId == year.Id)
                     .OrderBy(s => s.FullName).Take(MaxExportRows).ToListAsync(ct))
                     .Select(s => new object?[]
                     {
                         s.FullName, s.AcademicYearName, s.Email, s.Phone, s.CourseName, s.AdmissionDate, s.FeeAmount, s.Discounts, s.Surcharges,
-                        s.Payable, s.Paid, s.Pending, s.Status, s.Active ? "Yes" : "No"
+                        s.Payable, s.Paid, s.WrittenOff, s.Pending, s.Status, s.Active ? "Yes" : "No"
                     })
                     .ToList();
                 break;

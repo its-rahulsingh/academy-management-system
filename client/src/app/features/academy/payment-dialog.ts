@@ -6,6 +6,14 @@ import { UI, today } from '../../shared/ui';
 export interface PaymentSaved {
   id: string;
   receipt: string;
+  /** False when the student has no email address, so no receipt email went out. */
+  emailed: boolean;
+}
+
+/** The confirmation shown after recording a payment or refund. */
+export function savedMessage(saved: PaymentSaved, refund: boolean): string {
+  return `${refund ? 'Refund' : 'Payment'} recorded — receipt ${saved.receipt}. `
+    + (saved.emailed ? 'Receipt emailed to the student.' : 'No email on record, so no receipt was emailed — print it from the Payments page if needed.');
 }
 
 /**

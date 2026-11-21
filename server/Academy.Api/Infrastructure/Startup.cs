@@ -167,6 +167,8 @@ public static class Startup
         academy.MapFacultyPortalEndpoints();
         academy.MapAttendanceEndpoints();
         academy.MapStudentPortalEndpoints();
+        academy.MapPromotionEndpoints();
+        academy.MapFacultyAttendanceEndpoints();
         academy.MapExpenseEndpoints();
         academy.MapTestEndpoints();
         academy.MapReportEndpoints();

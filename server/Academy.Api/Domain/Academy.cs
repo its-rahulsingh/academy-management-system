@@ -74,6 +74,8 @@ public sealed class Student : TenantEntity
 {
     /// <summary>The academic year the student was admitted into. Lists of students are shown per year.</summary>
     public Guid AcademicYearId { get; set; }
+    /// <summary>Set when the student was promoted from an earlier year: that year's record.</summary>
+    public Guid? PreviousStudentId { get; set; }
     public AcademicYear AcademicYear { get; set; } = null!;
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
@@ -277,7 +279,9 @@ public sealed class StudentPayment : LedgerEntry
 public enum AdjustmentKind
 {
     Discount,
-    Surcharge
+    Surcharge,
+    /// <summary>The rest of a balance given up in a final settlement. Kept apart from discounts so reports show it.</summary>
+    WriteOff
 }
 
 /// <summary>A change to what a student owes without touching the admission fee: scholarship, waiver, late fee.</summary>

@@ -24,13 +24,15 @@ public sealed class StudentBalance
     public decimal Surcharges { get; init; }
     public decimal Received { get; init; }
     public decimal Refunded { get; init; }
+    /// <summary>Given up in a final settlement.</summary>
+    public decimal WrittenOff { get; init; }
 
     /// <summary>What the student owes in total after discounts and surcharges.</summary>
     public decimal Payable => Math.Max(0, FeeAmount - Discounts + Surcharges);
     /// <summary>Money kept: received minus refunded.</summary>
     public decimal Paid => Received - Refunded;
-    public decimal Pending => Math.Max(0, Payable - Paid);
-    public string Status => Paid >= Payable ? "Paid" : Paid > 0 ? "Partial" : "Pending";
+    public decimal Pending => Math.Max(0, Payable - Paid - WrittenOff);
+    public string Status => Paid >= Payable ? "Paid" : WrittenOff > 0 && Pending == 0 ? "Settled" : Paid > 0 ? "Partial" : "Pending";
 }
 
 public static class StudentLedger
@@ -66,15 +68,20 @@ public static class StudentLedger
                 .Sum(p => (decimal?)p.Amount) ?? 0,
             Refunded = db.StudentPayments
                 .Where(p => p.StudentId == s.Id && p.Status == LedgerStatus.Posted && p.Kind == PaymentKind.Refund)
-                .Sum(p => (decimal?)p.Amount) ?? 0
+                .Sum(p => (decimal?)p.Amount) ?? 0,
+            WrittenOff = db.FeeAdjustments
+                .Where(a => a.StudentId == s.Id && a.Status == LedgerStatus.Posted && a.Kind == AdjustmentKind.WriteOff)
+                .Sum(a => (decimal?)a.Amount) ?? 0
         });
 
     public static IQueryable<StudentBalance> WithStatus(this IQueryable<StudentBalance> rows, string? status) => status switch
     {
         "Paid" => rows.Where(r => r.Received - r.Refunded >= r.FeeAmount - r.Discounts + r.Surcharges),
-        "Partial" => rows.Where(r => r.Received - r.Refunded > 0 && r.Received - r.Refunded < r.FeeAmount - r.Discounts + r.Surcharges),
-        "Pending" => rows.Where(r => r.Received - r.Refunded <= 0 && r.FeeAmount - r.Discounts + r.Surcharges > 0),
-        "Due" => rows.Where(r => r.Received - r.Refunded < r.FeeAmount - r.Discounts + r.Surcharges),
+        "Settled" => rows.Where(r => r.WrittenOff > 0 && r.Received - r.Refunded < r.FeeAmount - r.Discounts + r.Surcharges
+                                     && r.Received - r.Refunded + r.WrittenOff >= r.FeeAmount - r.Discounts + r.Surcharges),
+        "Partial" => rows.Where(r => r.Received - r.Refunded > 0 && r.Received - r.Refunded + r.WrittenOff < r.FeeAmount - r.Discounts + r.Surcharges),
+        "Pending" => rows.Where(r => r.Received - r.Refunded <= 0 && r.Received - r.Refunded + r.WrittenOff < r.FeeAmount - r.Discounts + r.Surcharges),
+        "Due" => rows.Where(r => r.Received - r.Refunded + r.WrittenOff < r.FeeAmount - r.Discounts + r.Surcharges),
         _ => rows
     };
 

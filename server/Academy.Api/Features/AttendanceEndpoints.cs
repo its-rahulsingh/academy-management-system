@@ -110,7 +110,7 @@ public static class AttendanceEndpoints
     public sealed record ClockInRequest(ClockMethod Method, string? Code, double? Latitude, double? Longitude, double? Accuracy, Guid? SubjectId);
     /// <param name="EndTime">"HH:mm" on the class's date, when the class ended earlier than now. Optional.</param>
     public sealed record ClockOutRequest(ClockMethod Method, string? Code, double? Latitude, double? Longitude, double? Accuracy, string? Topic, string? EndTime = null);
-    public sealed record SettingsRequest(double? Latitude, double? Longitude, int RadiusMeters, int? MaxClassMinutes = null);
+    public sealed record SettingsRequest(double? Latitude, double? Longitude, int RadiusMeters, int? MaxClassMinutes = null, bool? AutoApprovePackageClasses = null);
     public sealed record StopRequest(string? EndTime);
     public sealed record EndTimeRequest(string? EndTime, string? Topic);
     public sealed record ManualRequest(DateOnly? Date, string? StartTime, string? EndTime, Guid? SubjectId, string? Topic, string? Reason);
@@ -251,7 +251,7 @@ public static class AttendanceEndpoints
 
     private static async Task<IResult> Settings(AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct) =>
         Results.Ok(await db.Tenants.AsNoTracking().Where(t => t.Id == currentUser.TenantId)
-            .Select(t => new { t.Latitude, t.Longitude, radiusMeters = t.GeofenceRadiusMeters, enabled = t.Latitude != null, t.MaxClassMinutes })
+            .Select(t => new { t.Latitude, t.Longitude, radiusMeters = t.GeofenceRadiusMeters, enabled = t.Latitude != null, t.MaxClassMinutes, t.AutoApprovePackageClasses })
             .FirstAsync(ct));
 
     private static async Task<IResult> SaveSettings(SettingsRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
@@ -267,10 +267,12 @@ public static class AttendanceEndpoints
         tenant.Longitude = request.Longitude is { } lo ? Math.Round(lo, 6) : null;
         tenant.GeofenceRadiusMeters = request.RadiusMeters;
         if (request.MaxClassMinutes is { } max) tenant.MaxClassMinutes = max;
+        if (request.AutoApprovePackageClasses is { } auto) tenant.AutoApprovePackageClasses = auto;
         await db.SaveChangesAsync(ct);
         return Results.Ok(new
         {
-            tenant.Latitude, tenant.Longitude, radiusMeters = tenant.GeofenceRadiusMeters, enabled = tenant.Latitude != null, tenant.MaxClassMinutes
+            tenant.Latitude, tenant.Longitude, radiusMeters = tenant.GeofenceRadiusMeters, enabled = tenant.Latitude != null, tenant.MaxClassMinutes,
+            tenant.AutoApprovePackageClasses
         });
     }
 
@@ -519,11 +521,15 @@ public static class AttendanceEndpoints
         }
 
         var faculty = await db.Faculty.AsNoTracking().FirstAsync(f => f.Id == clock.FacultyId, ct);
-        var maxClass = await MaxClassMinutesAsync(db, faculty.TenantId, ct);
+        var settings = await db.Tenants.Where(t => t.Id == faculty.TenantId).Select(t => new { t.MaxClassMinutes, t.AutoApprovePackageClasses }).FirstAsync(ct);
+        var maxClass = settings.MaxClassMinutes;
         var recorded = Math.Min(minutes, FacultySession.MaxMinutes);
         var tooLong = minutes > maxClass;
         var typedIn = clock.CorrectedEndUtc is not null || clock.InMethod == ClockMethod.Manual;
-        var trusted = clock.InMethod == ClockMethod.Qr && clock.OutMethod == ClockMethod.Qr && !typedIn && !tooLong;
+        static bool Proved(ClockMethod? m) => m is ClockMethod.Qr or ClockMethod.Location;
+        var packageTrusted = faculty.PayType == FacultyPayType.Package && settings.AutoApprovePackageClasses
+                             && Proved(clock.InMethod) && Proved(clock.OutMethod);
+        var trusted = !typedIn && !tooLong && (clock.InMethod == ClockMethod.Qr && clock.OutMethod == ClockMethod.Qr || packageTrusted);
         // Package faculty are not paid by the hour; their classes are still recorded, as attendance.
         var rate = faculty.PayType == FacultyPayType.Hourly ? faculty.HourlyRate : 0;
 
@@ -545,7 +551,9 @@ public static class AttendanceEndpoints
             SubjectId = clock.SubjectId,
             Topic = Validate.Text(topic, 200),
             Review = trusted ? SessionReview.Approved : SessionReview.Pending,
-            ReviewNote = trusted ? "Verified by QR at clock-in and clock-out" : string.Join(". ", reasons.Distinct()),
+            ReviewNote = !trusted ? string.Join(". ", reasons.Distinct())
+                : clock.InMethod == ClockMethod.Qr && clock.OutMethod == ClockMethod.Qr ? "Verified by QR at clock-in and clock-out"
+                : "Package faculty attendance, approved automatically",
             ReviewedByUserId = trusted ? clock.OutVerifiedByUserId : null,
             ReviewedAtUtc = trusted ? DateTime.UtcNow : null
         };

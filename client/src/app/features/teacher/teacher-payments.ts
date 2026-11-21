@@ -17,6 +17,48 @@ type Tab = 'unpaid' | 'paid' | 'payouts' | 'rates';
     }
 
     @if (data(); as d) {
+      @if (d.faculty.payType === 'Package') {
+        <div class="teacher-stats">
+          <article class="tstat dark">
+            <div class="tstat-top">PACKAGE<span>▣</span></div>
+            <div class="tstat-value">{{ d.faculty.agreedPayout | money }}</div>
+            <small>Agreed with the academy</small>
+          </article>
+          <article class="tstat sage">
+            <div class="tstat-top">RECEIVED<span>✓</span></div>
+            <div class="tstat-value">{{ d.received | money }}</div>
+            <small>{{ d.payouts.length }} {{ d.payouts.length === 1 ? 'payment' : 'payments' }}</small>
+          </article>
+          <article class="tstat rose">
+            <div class="tstat-top">BALANCE<span>!</span></div>
+            <div class="tstat-value">{{ d.unpaid | money }}</div>
+            <small>Still to be paid</small>
+          </article>
+          <article class="tstat sky">
+            <div class="tstat-top">LAST PAYMENT<span>₹</span></div>
+            @if (d.lastPayout; as last) {
+              <div class="tstat-value">{{ last.amount | money }}</div>
+              <small>{{ last.paidOn | day }} · {{ last.method }}</small>
+            } @else {
+              <div class="tstat-value">—</div>
+              <small>No payment yet</small>
+            }
+          </article>
+        </div>
+        <section class="teacher-panel">
+          <h2 class="teacher-h2">Payments received</h2>
+          @for (p of d.payouts; track p.id) {
+            <article class="session-row">
+              <div class="session-date"><b>{{ p.paidOn.slice(8, 10) }}</b><small>{{ shortMonth(p.paidOn) }}</small></div>
+              <div class="session-main"><strong>{{ p.method }}</strong><small>{{ p.notes || (p.paidOn | day) }}</small></div>
+              <div class="session-pay"><b class="positive">{{ p.amount | money: true }}</b></div>
+            </article>
+          } @empty {
+            <div class="teacher-empty"><div class="art" aria-hidden="true">₹</div><strong>No payments received yet</strong></div>
+          }
+          <p class="muted gap-top">You are paid a package, so your classes are recorded as attendance and are not priced one by one.</p>
+        </section>
+      } @else {
       <div class="teacher-stats">
         <article class="tstat rose">
           <div class="tstat-top">UNPAID<span>!</span></div>
@@ -110,6 +152,7 @@ type Tab = 'unpaid' | 'paid' | 'payouts' | 'rates';
           }
         }
       </section>
+      }
     }
   `,
 })

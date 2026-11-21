@@ -162,7 +162,7 @@ type Dialog = 'details' | 'subscription' | 'superAdmin' | 'password' | 'markPaid
           <app-modal [title]="'Reset password — ' + passwordFor()?.displayName" saveLabel="Set password" [busy]="form.busy()" [error]="form.error()" (closed)="close()" (saved)="savePassword(t)">
             <label for="newPassword">New password * (at least 5 characters)</label>
             <input id="newPassword" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
-            <div class="helper">Re-enables the account if it was disabled. The user must choose their own password at next sign-in.</div>
+            <div class="helper">Re-enables the account if it was disabled and emails them the new password. They must choose their own password at next sign-in.</div>
           </app-modal>
         }
         @case ('markPaid') {

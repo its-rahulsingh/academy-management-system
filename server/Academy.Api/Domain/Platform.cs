@@ -38,6 +38,11 @@ public sealed class Tenant : Entity
     public string CheckInSecret { get; set; } = "";
     /// <summary>A class running longer than this always goes for approval, and its faculty member is reminded.</summary>
     public int MaxClassMinutes { get; set; } = 180;
+    /// <summary>
+    /// Package faculty are not paid per class, so their QR or location clock-ins are approved without a review.
+    /// Over-long classes, typed-in times and forgotten clock-in requests still wait for approval.
+    /// </summary>
+    public bool AutoApprovePackageClasses { get; set; } = true;
 
     /// <summary>The name the academy's emails show as their sender. Empty uses the academy name.</summary>
     public string EmailSenderName { get; set; } = "";

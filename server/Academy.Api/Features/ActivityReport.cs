@@ -179,7 +179,7 @@ public static class ActivityReport
 
     private sealed record Totals(
         int Admissions, int Applications, decimal Collections, decimal Refunds, decimal Discounts, decimal Surcharges,
-        decimal Expenses, decimal Payouts, int TeachingMinutes, decimal TeachingPay, int Tests)
+        decimal Expenses, decimal Payouts, int TeachingMinutes, decimal TeachingPay, int Tests, decimal WrittenOff)
     {
         public decimal NetCash => Collections - Refunds - Expenses - Payouts;
     }
@@ -231,7 +231,7 @@ public static class ActivityReport
             .Select(a => new { a.CreatedAtUtc, Student = a.Student.FullName, a.Kind, a.Amount, a.Reason, a.Status, a.CreatedByUserId })
             .ToListAsync(ct);
         events.AddRange(adjustments.Select(a => new Event(AcademyClock.LocalDate(a.CreatedAtUtc), AcademyClock.ToLocal(a.CreatedAtUtc),
-            a.Kind.ToString(), a.Student, a.Reason, a.Amount, "", a.Status.ToString(), By(a.CreatedByUserId))));
+            a.Kind == AdjustmentKind.WriteOff ? "Written off" : a.Kind.ToString(), a.Student, a.Reason, a.Amount, "", a.Status.ToString(), By(a.CreatedByUserId))));
 
         var expenses = await db.Expenses.AsNoTracking()
             .Where(e => e.SpentOn >= from && e.SpentOn <= to)
@@ -289,7 +289,8 @@ public static class ActivityReport
             Money("Fee payment"), Money("Refund"), Money(nameof(AdjustmentKind.Discount)), Money(nameof(AdjustmentKind.Surcharge)),
             Money("Expense"), Money("Faculty payout"),
             teaching.Sum(e => e.Minutes ?? 0), teaching.Sum(e => e.Amount ?? 0),
-            events.Count(e => e.Type == "Test"));
+            events.Count(e => e.Type == "Test"),
+            Money("Written off"));
     }
 
     private static List<(ReportPeriods.Period Period, Totals Totals)> ByPeriod(List<Event> events, DateOnly from, DateOnly to, ReportGrouping grouping)
@@ -328,7 +329,7 @@ public static class ActivityReport
     private static object Shape(Totals t) => new
     {
         t.Admissions, t.Applications, t.Collections, t.Refunds, t.Discounts, t.Surcharges, t.Expenses, t.Payouts,
-        t.TeachingMinutes, t.TeachingPay, t.Tests, t.NetCash
+        t.TeachingMinutes, t.TeachingPay, t.Tests, t.NetCash, t.WrittenOff
     };
 
     private static async Task<IResult> Download(
@@ -342,10 +343,10 @@ public static class ActivityReport
         var academy = (await access.GetAsync(currentUser.TenantId!.Value, ct))?.TenantName ?? "Academy";
         using var book = new XLWorkbook();
 
-        var money = new HashSet<int> { 3, 4, 5, 6, 7, 8, 10, 12 };
+        var money = new HashSet<int> { 3, 4, 5, 6, 7, 8, 10, 12, 13 };
         var periodSheet = Excel.Sheet(book, ReportPeriods.Title(grouping),
             ["Period", "Admissions", "Online applications", "Fees collected", "Refunds", "Discounts", "Surcharges", "Expenses",
-             "Faculty payouts", "Teaching minutes", "Teaching pay (approved)", "Tests", "Net cash"],
+             "Faculty payouts", "Teaching minutes", "Teaching pay (approved)", "Tests", "Net cash", "Written off in settlements"],
             ByPeriod(events, start, end, grouping).Select(x => Row(x.Period.Label, x.Totals)), money);
         Excel.TotalRow(periodSheet, Row("Total", Sum(events)), money);
 
@@ -370,6 +371,6 @@ public static class ActivityReport
     private static object?[] Row(string label, Totals t) =>
     [
         label, t.Admissions, t.Applications, t.Collections, t.Refunds, t.Discounts, t.Surcharges, t.Expenses, t.Payouts,
-        t.TeachingMinutes, t.TeachingPay, t.Tests, t.NetCash
+        t.TeachingMinutes, t.TeachingPay, t.Tests, t.NetCash, t.WrittenOff
     ];
 }

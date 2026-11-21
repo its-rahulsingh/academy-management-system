@@ -69,8 +69,11 @@ public static class FacultyPortalEndpoints
     /// approved sessions are covered by the total paid out until it runs out.
     /// A session the money only partly covers still shows as approved (unpaid).
     /// </summary>
-    private static async Task<HashSet<Guid>> PaidSessionIdsAsync(AcademyDbContext db, Guid facultyId, decimal paid, CancellationToken ct)
+    private static async Task<HashSet<Guid>> PaidSessionIdsAsync(AcademyDbContext db, Faculty faculty, decimal paid, CancellationToken ct)
     {
+        // Package faculty are paid their package, not per class, so none of their classes is "paid".
+        if (faculty.PayType == FacultyPayType.Package) return [];
+        var facultyId = faculty.Id;
         var counting = await db.FacultySessions.AsNoTracking().Counting().Where(s => s.FacultyId == facultyId)
             .OrderBy(s => s.TaughtOn).ThenBy(s => s.CreatedAtUtc)
             .Select(s => new { s.Id, s.Amount })
@@ -110,7 +113,7 @@ public static class FacultyPortalEndpoints
 
         var paid = await FacultyEndpoints.PaidToAsync(db, faculty.Id, ct);
         var earned = await FacultyEndpoints.EarnedAsync(db, faculty, ct);
-        var paidIds = await PaidSessionIdsAsync(db, faculty.Id, paid, ct);
+        var paidIds = await PaidSessionIdsAsync(db, faculty, paid, ct);
         var monthRows = await db.FacultySessions
             .Where(s => s.FacultyId == faculty.Id && s.TaughtOn >= start && s.TaughtOn <= end && s.Status == LedgerStatus.Posted)
             .Project(currentUser.UserId)
@@ -143,6 +146,7 @@ public static class FacultyPortalEndpoints
             {
                 minutes = counted.Sum(r => r.Minutes),
                 sessions = counted.Count,
+                days = counted.Select(r => r.TaughtOn).Distinct().Count(),
                 earned = counted.Sum(r => r.Amount),
                 waitingMinutes = monthWaiting.Sum(r => r.Minutes),
                 waitingSessions = monthWaiting.Count
@@ -184,7 +188,7 @@ public static class FacultyPortalEndpoints
         var list = await rows.OrderByDescending(s => s.TaughtOn).ThenByDescending(s => s.StartTime).ThenByDescending(s => s.CreatedAtUtc)
             .Take(MaxListed).Project(currentUser.UserId).ToListAsync(ct);
 
-        var paidIds = await PaidSessionIdsAsync(db, faculty.Id, await FacultyEndpoints.PaidToAsync(db, faculty.Id, ct), ct);
+        var paidIds = await PaidSessionIdsAsync(db, faculty, await FacultyEndpoints.PaidToAsync(db, faculty.Id, ct), ct);
         var shaped = list.Select(r => (Row: r, State: StateOf(r, paidIds))).ToList();
 
         // "Deleted history" holds what was withdrawn or rejected; the other tabs hold live sessions.
@@ -230,7 +234,7 @@ public static class FacultyPortalEndpoints
         if (await CurrentFacultyAsync(db, currentUser, ct) is not { } faculty) return NotLinked();
         var paid = await FacultyEndpoints.PaidToAsync(db, faculty.Id, ct);
         var earned = await FacultyEndpoints.EarnedAsync(db, faculty, ct);
-        var paidIds = await PaidSessionIdsAsync(db, faculty.Id, paid, ct);
+        var paidIds = await PaidSessionIdsAsync(db, faculty, paid, ct);
 
         var counting = await db.FacultySessions.Counting().Where(s => s.FacultyId == faculty.Id)
             .OrderByDescending(s => s.TaughtOn).ThenByDescending(s => s.CreatedAtUtc)

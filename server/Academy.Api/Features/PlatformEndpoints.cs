@@ -254,8 +254,8 @@ public static partial class PlatformEndpoints
 
         // Academies start their year in different months; the Super Admin can adjust these dates.
         db.AddRange(tenant, subscription, user, AcademicYear.DefaultFor(tenant.Id, today));
-        var (subject, body) = EmailTemplates.Welcome(user.DisplayName, tenant.Name, tenant.Code, user.Email,
-            AuthEndpoints.PublicBaseUrl(appOptions.Value, http));
+        var (subject, body) = EmailTemplates.Welcome(user.DisplayName, tenant.Name, tenant.Code, user.Email, admin.Password!,
+            AuthEndpoints.PublicBaseUrl(appOptions.Value, http), "You can manage everything in the academy, including its users and subscription.");
         email.Enqueue(tenant.Id, user.Email, subject, body, "Welcome");
 
         try
@@ -347,7 +347,9 @@ public static partial class PlatformEndpoints
         return Results.Ok(new { success = true });
     }
 
-    private static async Task<IResult> AddSuperAdmin(Guid id, SuperAdminRequest request, AcademyDbContext db, SessionService sessions, CancellationToken ct)
+    private static async Task<IResult> AddSuperAdmin(
+        Guid id, SuperAdminRequest request, AcademyDbContext db, SessionService sessions, EmailQueue emails,
+        IOptions<AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         if (!Validate.Name(request.Name, 140) || !Validate.Email(request.Email)) return ApiResults.Bad("Enter a name and a valid email.");
         if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
@@ -360,12 +362,14 @@ public static partial class PlatformEndpoints
         var user = new AppUser { TenantId = id, Email = email, DisplayName = request.Name!.Trim(), Role = Roles.SuperAdmin, MustChangePassword = true };
         sessions.SetPassword(user, request.Password!);
         db.Users.Add(user);
+        await AccountEmails.QueueWelcomeAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/platform/tenants/{id}", new { user.Id });
     }
 
     private static async Task<IResult> SetUserPassword(
-        Guid id, Guid userId, SetPasswordRequest request, AcademyDbContext db, SessionService sessions, CancellationToken ct)
+        Guid id, Guid userId, SetPasswordRequest request, AcademyDbContext db, SessionService sessions, EmailQueue emails,
+        IOptions<AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
         var user = await db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == id, ct);
@@ -374,6 +378,7 @@ public static partial class PlatformEndpoints
         sessions.SetPassword(user, request.Password!);
         user.MustChangePassword = true;
         user.Active = true;
+        await AccountEmails.QueuePasswordSetAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Ok(new { success = true });
     }

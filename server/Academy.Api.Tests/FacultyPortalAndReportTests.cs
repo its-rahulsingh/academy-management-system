@@ -212,7 +212,7 @@ public sealed class FacultyPortalTests(AppFactory factory)
 public sealed class StudentPortalTests(AppFactory factory)
 {
     [Fact]
-    public async Task A_student_sees_only_their_own_fees_receipts_and_results()
+    public async Task A_student_sees_their_own_course_and_results_but_nothing_about_money()
     {
         var academy = await factory.NewAcademyAsync();
         var course = await academy.NewCourseAsync("Class 10", 20000);
@@ -232,11 +232,12 @@ public sealed class StudentPortalTests(AppFactory factory)
 
         var me = await portal.GetJsonAsync("/api/me/student");
         Assert.Equal("Asha Rao", me["student"]!["fullName"]!.GetValue<string>());
-        Assert.Equal(15000, me["fees"]!.Money("pending"));
-        Assert.Single(me["payments"]!.AsArray());
-
-        Assert.Equal(HttpStatusCode.OK, (await portal.GetAsync($"/api/me/student/receipts/{ashaPayment}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await portal.GetAsync($"/api/me/student/receipts/{raviPayment}")).StatusCode);
+        // Fees, payments and receipts are not part of the portal at all; receipts go to the student by email.
+        Assert.Null(me["fees"]);
+        Assert.Null(me["payments"]);
+        Assert.Null(me["adjustments"]);
+        Assert.DoesNotContain("20000", me.ToJsonString());
+        Assert.Equal(HttpStatusCode.NotFound, (await portal.GetAsync($"/api/me/student/receipts/{ashaPayment}")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await portal.GetAsync("/api/me/student/report-card")).StatusCode);
 
         foreach (var url in new[] { "/api/dashboard", "/api/students", $"/api/payments/{raviPayment}/receipt", $"/api/tests/report-cards/{ravi}", "/api/me/faculty" })

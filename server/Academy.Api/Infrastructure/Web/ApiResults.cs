@@ -103,11 +103,15 @@ public static class QueryExtensions
 public sealed class TenantAccessFilter(ICurrentUser currentUser, TenantAccessService access) : IEndpointFilter
 {
     public const string SubscriptionInactiveCode = "subscription_inactive";
+    public const string PasswordChangeRequiredCode = "password_change_required";
 
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
         if (currentUser.TenantId is not { } tenantId)
             return ApiResults.Error(StatusCodes.Status403Forbidden, "This area is for academy accounts.");
+        // A starting password (often sent by email) must be replaced before anything else is allowed.
+        if (context.HttpContext.User.HasClaim(c => c.Type == AppClaims.MustChangePassword))
+            return ApiResults.Error(StatusCodes.Status403Forbidden, "Choose your own password before continuing.", PasswordChangeRequiredCode);
 
         var state = await access.GetAsync(tenantId, context.HttpContext.RequestAborted);
         if (state is null || !state.Allowed)

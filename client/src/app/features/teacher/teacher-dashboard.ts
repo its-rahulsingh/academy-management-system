@@ -69,6 +69,31 @@ export function duration(minutes: number): string {
 
       <app-clock-panel [subjects]="activeSubjects()" (changed)="load()" />
 
+      @if (isPackage()) {
+        <!-- Package faculty are not paid per class: their month is about attendance. -->
+        <div class="teacher-stats">
+          <article class="tstat dark">
+            <div class="tstat-top">TIME · {{ monthLabel().toUpperCase() }}<span>◷</span></div>
+            <div class="tstat-value">{{ duration(o.thisMonth.minutes) }}</div>
+            <small>{{ o.thisMonth.sessions }} {{ o.thisMonth.sessions === 1 ? 'class' : 'classes' }}</small>
+          </article>
+          <article class="tstat sage">
+            <div class="tstat-top">DAYS PRESENT<span>✓</span></div>
+            <div class="tstat-value">{{ o.thisMonth.days }}</div>
+            <small>in {{ monthLabel() }}</small>
+          </article>
+          <article class="tstat peach">
+            <div class="tstat-top">WAITING APPROVAL<span>⧗</span></div>
+            <div class="tstat-value">{{ o.totals.waitingSessions }}</div>
+            <small>{{ duration(o.thisMonth.waitingMinutes) }} this month</small>
+          </article>
+          <article class="tstat sky">
+            <div class="tstat-top">PACKAGE BALANCE<span>▣</span></div>
+            <div class="tstat-value">{{ o.totals.owed | money }}</div>
+            <small>of {{ o.faculty.agreedPayout | money }} package</small>
+          </article>
+        </div>
+      } @else {
       <div class="teacher-stats">
         <article class="tstat dark">
           <div class="tstat-top">TIME · {{ monthLabel().toUpperCase() }}<span>◷</span></div>
@@ -97,6 +122,7 @@ export function duration(minutes: number): string {
           <small>Approved sessions</small>
         </article>
       </div>
+      }
 
       @if (o.subjects.length) {
         <h2 class="teacher-h2">My subjects</h2>
@@ -116,7 +142,7 @@ export function duration(minutes: number): string {
       <section class="teacher-panel">
         <div class="teacher-toolbar">
           <div class="segmented" role="tablist">
-            @for (t of tabs; track t.view) {
+            @for (t of visibleTabs(); track t.view) {
               <button type="button" role="tab" [class.active]="view() === t.view" [attr.aria-selected]="view() === t.view" (click)="setView(t.view)">
                 {{ t.label }} <span class="count">{{ counts()[t.view] }}</span>
               </button>
@@ -150,7 +176,12 @@ export function duration(minutes: number): string {
                 <small class="note">{{ s.state === 'Rejected' ? 'Reason: ' : '' }}{{ s.note }}</small>
               }
             </div>
-            <div class="session-pay"><b>{{ s.amount | money: true }}</b><app-status [value]="stateLabel(s)" /></div>
+            <div class="session-pay">
+              @if (!isPackage()) {
+                <b>{{ s.amount | money: true }}</b>
+              }
+              <app-status [value]="stateLabel(s)" />
+            </div>
             @if (s.state === 'Waiting') {
               <button type="button" class="table-action danger-text" (click)="withdrawTarget.set(s)">Withdraw</button>
             }
@@ -207,6 +238,9 @@ export class TeacherDashboardComponent {
   protected readonly counts = computed(() => this.list()?.counts ?? { all: 0, waiting: 0, approved: 0, paid: 0, removed: 0 });
   protected readonly truncated = computed(() => this.sessions().length >= 500);
   protected readonly clockPanel = viewChild(ClockPanelComponent);
+  /** Package faculty: attendance, not pay per class. */
+  protected readonly isPackage = computed(() => this.overview()?.faculty.payType === 'Package');
+  protected readonly visibleTabs = computed(() => (this.isPackage() ? this.tabs.filter(t => t.view !== 'paid') : this.tabs));
   protected readonly activeSubjects = computed(() => (this.overview()?.subjects ?? []).filter(s => s.active));
   protected readonly monthLabel = computed(() => {
     const [y, m] = this.month().split('-').map(Number);
@@ -263,6 +297,7 @@ export class TeacherDashboardComponent {
   }
 
   protected stateLabel(s: PortalSession): string {
+    if (this.isPackage() && (s.state === 'Approved' || s.state === 'Paid')) return 'Approved';
     return s.state === 'Approved' ? 'Approved · unpaid' : s.state === 'Waiting' ? 'Waiting approval' : s.state;
   }
 

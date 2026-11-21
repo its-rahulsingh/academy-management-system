@@ -171,7 +171,27 @@ public sealed class BrowserHandler : DelegatingHandler
 
 public static class HttpExtensions
 {
+    /// <summary>
+    /// Signs in. Like a real user, an account still on its starting password chooses its own before doing anything
+    /// else; here it is changed and then set back, so later sign-ins with the same password keep working.
+    /// The original sign-in response is returned, so tests can still see that a change was required.
+    /// </summary>
     public static async Task<JsonNode> LoginAsync(this HttpClient client, string? academyCode, string email, string password = AppFactory.Password)
+    {
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { academyCode, email, password });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var session = await response.ReadJsonAsync();
+        if (session["mustChangePassword"]?.GetValue<bool>() == true)
+        {
+            var temporary = password + "-own";
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = password, newPassword = temporary })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = temporary, newPassword = password })).StatusCode);
+        }
+        return session;
+    }
+
+    /// <summary>Signs in without choosing a new password, as someone who has only just been given an account.</summary>
+    public static async Task<JsonNode> LoginOnlyAsync(this HttpClient client, string? academyCode, string email, string password = AppFactory.Password)
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new { academyCode, email, password });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

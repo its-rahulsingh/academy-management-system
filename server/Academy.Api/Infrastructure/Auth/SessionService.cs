@@ -62,6 +62,7 @@ public sealed class SessionService(IMemoryCache cache, IPasswordHasher<AppUser> 
             new(AppClaims.SecurityStamp, user.SecurityStamp)
         };
         if (user.TenantId is { } tenantId) claims.Add(new Claim(AppClaims.TenantId, tenantId.ToString()));
+        if (user.MustChangePassword) claims.Add(new Claim(AppClaims.MustChangePassword, "true"));
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         return http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));

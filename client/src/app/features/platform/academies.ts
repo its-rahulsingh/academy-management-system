@@ -91,7 +91,7 @@ import { UI } from '../../shared/ui';
         </div>
         <label for="adminPassword">Initial password * (at least 5 characters)</label>
         <input id="adminPassword" type="password" autocomplete="new-password" [(ngModel)]="model.superAdmin.password" />
-        <div class="helper">Share the code, email and password privately. They must choose their own password at first sign-in, and can then create their own staff logins.</div>
+        <div class="helper">The academy code, email and password are emailed to them. They must choose their own password at first sign-in, and can then create their own staff logins.</div>
       </app-modal>
     }
   `,

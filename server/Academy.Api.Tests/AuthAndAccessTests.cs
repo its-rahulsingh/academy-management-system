@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -38,7 +39,36 @@ public sealed class AuthAndAccessTests(AppFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, noAcademy.StatusCode);
         Assert.Equal("SuperAdmin", session["user"]!["role"]!.GetValue<string>());
         Assert.Equal(a.Code, session["tenant"]!["code"]!.GetValue<string>());
-        Assert.True(session["mustChangePassword"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task A_new_login_gets_its_password_by_email_and_must_change_it_before_anything_else()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var email = $"desk-{Guid.NewGuid():N}@{academy.Code}.test";
+        Assert.Equal(HttpStatusCode.Created,
+            (await academy.Admin.PostAsJsonAsync("/api/users", new { displayName = "Front Desk", email, role = "Staff", password = "desk1" })).StatusCode);
+
+        var welcome = await factory.WithDbAsync(db => db.EmailMessages.IgnoreQueryFilters()
+            .Where(m => m.ToAddress == email && m.Category == "Welcome").Select(m => m.Body).SingleAsync());
+        Assert.Contains("Starting password: desk1", welcome);
+        Assert.Contains($"Academy code: {academy.Code}", welcome);
+
+        var browser = factory.NewBrowser();
+        Assert.True((await browser.LoginOnlyAsync(academy.Code, email, "desk1"))["mustChangePassword"]!.GetValue<bool>());
+        var blocked = await browser.GetAsync("/api/students");
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.Contains("own password", await blocked.ErrorAsync());
+
+        Assert.Equal(HttpStatusCode.OK, (await browser.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = "desk1", newPassword = "my-own-pass" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await browser.GetAsync("/api/students")).StatusCode);
+
+        // An administrator resetting the password emails the new one and asks for a change again.
+        var userId = (await academy.Admin.GetJsonAsync("/api/users"))["items"]!.AsArray().Single(u => u!["email"]!.GetValue<string>() == email)!["id"]!.GetValue<Guid>();
+        Assert.Equal(HttpStatusCode.OK, (await academy.Admin.PutAsJsonAsync($"/api/users/{userId}/password", new { password = "reset9" })).StatusCode);
+        Assert.Contains("New password: reset9", await factory.WithDbAsync(db => db.EmailMessages.IgnoreQueryFilters()
+            .Where(m => m.ToAddress == email && m.Category == "PasswordSet").Select(m => m.Body).SingleAsync()));
+        Assert.True((await factory.NewBrowser().LoginOnlyAsync(academy.Code, email, "reset9"))["mustChangePassword"]!.GetValue<bool>());
     }
 
     [Fact]

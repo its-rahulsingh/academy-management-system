@@ -3,9 +3,9 @@ import { RouterLink } from '@angular/router';
 import { AcademicYearService } from '../../core/academic-year.service';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { Course, Paged, Permission, Student, StudentDetail, StudentLookup } from '../../core/models';
+import { Course, PAYMENT_METHODS, Paged, Permission, Student, StudentDetail, StudentLookup } from '../../core/models';
 import { UI, today } from '../../shared/ui';
-import { PaymentDialogComponent, PaymentSaved } from './payment-dialog';
+import { PaymentDialogComponent, PaymentSaved, savedMessage } from './payment-dialog';
 
 interface VoidTarget {
   kind: 'payment' | 'adjustment';
@@ -28,6 +28,9 @@ interface VoidTarget {
           <button type="button" class="secondary" [disabled]="reminding()" (click)="remindAll()">✉ Remind all with dues</button>
         }
         @if (can(permission.StudentsWrite)) {
+          <a class="secondary" routerLink="/app/students/promote">⇪ Promote to next year</a>
+        }
+        @if (can(permission.StudentsWrite)) {
           <button type="button" class="primary" [disabled]="years.isClosed()" [title]="years.isClosed() ? 'This academic year has ended' : ''" (click)="openForm()">
             + Add student
           </button>
@@ -42,7 +45,7 @@ interface VoidTarget {
     <div class="filter-bar">
       <input placeholder="⌕  Search name, phone, email, course…" [ngModel]="search()" (ngModelChange)="onSearch($event)" />
       <select [ngModel]="status()" (ngModelChange)="status.set($event); list.reload()" aria-label="Fee status">
-        <option>All</option><option>Paid</option><option>Partial</option><option>Pending</option>
+        <option>All</option><option>Paid</option><option>Partial</option><option>Pending</option><option>Settled</option>
       </select>
       <select [ngModel]="courseId()" (ngModelChange)="courseId.set($event); list.reload()" aria-label="Course">
         <option value="">All courses</option>
@@ -116,6 +119,29 @@ interface VoidTarget {
       </app-modal>
     }
 
+    @if (settle.open()) {
+      <app-modal title="Settle balance" saveLabel="Settle" [busy]="settle.busy()" [error]="settle.error()" (closed)="settle.close()" (saved)="saveSettle()">
+        <p class="helper">
+          {{ settleModel.name }} owes <b>{{ settleModel.pending | money: true }}</b>. Record what they pay now; the rest is written off
+          and the student is marked <b>Settled</b>. They are not told the written-off amount.
+        </p>
+        <div class="two-fields">
+          <div><label for="settleAmount">Final payment now (₹)</label><input id="settleAmount" type="number" min="0" step="0.01" [(ngModel)]="settleModel.finalPayment" /></div>
+          <div>
+            <label for="settleMethod">Method</label>
+            <select id="settleMethod" [(ngModel)]="settleModel.method">
+              @for (m of methods; track m) {
+                <option>{{ m }}</option>
+              }
+            </select>
+          </div>
+        </div>
+        <p class="helper calc">Written off: <strong>{{ settleWriteOff() | money: true }}</strong></p>
+        <label for="settleReason">Reason *</label>
+        <input id="settleReason" [(ngModel)]="settleModel.reason" maxlength="500" placeholder="e.g. Final settlement agreed with parent" />
+      </app-modal>
+    }
+
     @if (login.open()) {
       <app-modal title="Give student portal login" saveLabel="Create login" [busy]="login.busy()" [error]="login.error()" (closed)="login.close()" (saved)="saveLogin()">
         <p class="helper">
@@ -126,7 +152,7 @@ interface VoidTarget {
         <input id="studentLoginEmail" type="email" [(ngModel)]="loginModel.email" autocomplete="off" />
         <label for="studentLoginPassword">Initial password * (at least 5 characters)</label>
         <input id="studentLoginPassword" type="password" autocomplete="new-password" [(ngModel)]="loginModel.password" />
-        <div class="helper">Share it with the student or parent. They choose their own password at first sign-in.</div>
+        <div class="helper">It is emailed to this address with the sign-in details. They must choose their own password at first sign-in.</div>
       </app-modal>
     }
 
@@ -136,8 +162,19 @@ interface VoidTarget {
           <div><small>AGREED FEE</small><b>{{ d.student.feeAmount | money }}</b></div>
           <div><small>ADJUSTMENTS</small><b>{{ d.student.surcharges - d.student.discounts | money }}</b></div>
           <div><small>PAID</small><b class="positive">{{ d.student.paid | money }}</b></div>
-          <div><small>PENDING</small><b class="negative">{{ d.student.pending | money }}</b></div>
+          @if (d.student.writtenOff > 0) {
+            <div><small>WRITTEN OFF</small><b>{{ d.student.writtenOff | money }}</b></div>
+          }
+          <div><small>{{ d.student.status === 'Settled' ? 'SETTLED' : 'PENDING' }}</small><b class="negative">{{ d.student.pending | money }}</b></div>
         </div>
+        @for (y of d.previousYears; track y.id) {
+          @if (y.due > 0) {
+            <div class="alert" role="status">
+              Previous year due: <b>{{ y.due | money }}</b> from {{ y.academicYearName }} ({{ y.courseName }}).
+              <button type="button" class="text-button" (click)="openDetail(y.id)">Open {{ y.academicYearName }} record →</button>
+            </div>
+          }
+        }
         <p class="helper">
           {{ d.student.courseName }} · {{ d.student.academicYearName }} · admitted {{ d.student.admissionDate | day }}
           @if (d.student.phone) { · {{ d.student.phone }} }
@@ -154,6 +191,9 @@ interface VoidTarget {
             <button type="button" class="secondary" (click)="openAdjustment('Surcharge')">Add surcharge</button>
             @if (d.student.paid > 0) {
               <button type="button" class="secondary" (click)="refund(d.student)">Refund</button>
+            }
+            @if (d.student.pending > 0) {
+              <button type="button" class="secondary" (click)="openSettle(d.student)">Settle balance</button>
             }
           }
           @if (can(permission.RemindersSend) && d.student.pending > 0 && d.student.email) {
@@ -278,6 +318,9 @@ export class StudentsComponent {
 
   protected readonly detail = signal<StudentDetail | null>(null);
   protected readonly login = new FormState();
+  protected readonly settle = new FormState();
+  protected readonly methods = PAYMENT_METHODS;
+  protected settleModel = { studentId: '', name: '', pending: 0, finalPayment: 0, method: 'Cash', reason: '' };
   protected loginModel = { studentId: '', name: '', email: '', password: '' };
   protected readonly detailError = signal('');
   protected readonly adjustment = new FormState();
@@ -386,8 +429,35 @@ export class StudentsComponent {
 
   protected paid(saved: PaymentSaved, refund: boolean): void {
     this.paying.set(null);
-    this.notify.success(`${refund ? 'Refund' : 'Payment'} recorded — receipt ${saved.receipt}`);
+    this.notify.success(savedMessage(saved, refund));
     this.refresh();
+  }
+
+  protected openSettle(student: Student): void {
+    this.settleModel = { studentId: student.id, name: student.fullName, pending: student.pending, finalPayment: 0, method: 'Cash', reason: '' };
+    this.settle.show();
+  }
+
+  protected settleWriteOff(): number {
+    return Math.max(0, this.settleModel.pending - (Number(this.settleModel.finalPayment) || 0));
+  }
+
+  protected saveSettle(): void {
+    const m = this.settleModel;
+    const final = Number(m.finalPayment) || 0;
+    if (final < 0) return this.settle.fail('The final payment cannot be negative.');
+    if (final >= m.pending) return this.settle.fail('That pays the whole balance. Record it as a normal payment instead.');
+    if (!m.reason.trim()) return this.settle.fail('Give a reason for the settlement.');
+    this.settle.submit(
+      this.api.post<{ writtenOff: number; receipt: string | null; emailed: boolean }>(`students/${m.studentId}/settle`, {
+        finalPayment: final || null, method: m.method, reason: m.reason.trim(),
+      }),
+      r => {
+        this.notify.success(`${m.name} settled — ${r.writtenOff.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} written off`
+          + (r.receipt ? `, receipt ${r.receipt}${r.emailed ? ' emailed' : ''}` : '') + '.');
+        this.refresh();
+      },
+    );
   }
 
   protected openAdjustment(kind: 'Discount' | 'Surcharge'): void {

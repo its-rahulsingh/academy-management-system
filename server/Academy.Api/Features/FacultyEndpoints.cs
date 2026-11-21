@@ -345,7 +345,8 @@ public static class FacultyEndpoints
     // ---- Portal login ----
 
     private static async Task<IResult> CreateLogin(
-        Guid id, LoginRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser, CancellationToken ct)
+        Guid id, LoginRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser,
+        Infrastructure.Email.EmailQueue emails, Microsoft.Extensions.Options.IOptions<Infrastructure.Email.AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         if (!Validate.Email(request.Email)) return ApiResults.Bad("Enter the email address the faculty member will sign in with.");
         if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
@@ -370,6 +371,7 @@ public static class FacultyEndpoints
         sessions.SetPassword(user, request.Password!);
         db.Users.Add(user);
         if (faculty.Email.Length == 0) faculty.Email = email;
+        await AccountEmails.QueueWelcomeAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/users/{user.Id}", new { user.Id });
     }

@@ -94,6 +94,9 @@ internal sealed class StudentConfiguration : IEntityTypeConfiguration<Student>
         e.Property(x => x.FeeAmount).IsMoney();
         e.HasOne(x => x.Course).WithMany().HasForeignKey(x => x.CourseId).OnDelete(DeleteBehavior.Restrict);
         e.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        // A record is promoted once: at most one later record points back to it.
+        e.HasIndex(x => x.PreviousStudentId).IsUnique().HasFilter("previous_student_id IS NOT NULL");
+        e.HasOne<Student>().WithMany().HasForeignKey(x => x.PreviousStudentId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

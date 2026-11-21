@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Academy.Api.Features;
 
 /// <summary>
-/// A student's own portal: their course, fees, receipts and test results. Everything is scoped to the student record
+/// A student's own portal: their course, subjects and teachers, and test results. Deliberately nothing about money:
+/// receipts are emailed to the student when a payment is recorded, and the agreed fee is seen only by staff. Everything is scoped to the student record
 /// linked to the signed-in login, so a student only ever sees their own information. Read-only.
 /// </summary>
 public static class StudentPortalEndpoints
@@ -22,7 +23,6 @@ public static class StudentPortalEndpoints
 
         var portal = academy.MapGroup("/me/student").RequirePermission(Permissions.StudentPortal);
         portal.MapGet("", Overview);
-        portal.MapGet("/receipts/{paymentId:guid}", Receipt);
         portal.MapGet("/report-card", ReportCard);
     }
 
@@ -54,19 +54,11 @@ public static class StudentPortalEndpoints
             r.Name,
             Faculty = teachers.Where(t => t.SubjectId == r.SubjectId).Select(t => t.FullName).Order().ToList()
         });
-        // Voided entries were mistakes; the student sees only what stands.
-        var payments = await db.StudentPayments.AsNoTracking()
-            .Where(p => p.StudentId == id && p.Status == LedgerStatus.Posted)
-            .OrderByDescending(p => p.PaidOn).ThenByDescending(p => p.ReceiptNumber)
-            .Select(p => new { p.Id, p.Kind, p.ReceiptNumber, p.Amount, p.Method, p.PaidOn })
-            .ToListAsync(ct);
-        var adjustments = await db.FeeAdjustments.AsNoTracking()
-            .Where(a => a.StudentId == id && a.Status == LedgerStatus.Posted)
-            .OrderByDescending(a => a.CreatedAtUtc)
-            .Select(a => new { a.Kind, a.Amount, a.Reason, a.CreatedAtUtc })
-            .ToListAsync(ct);
+        // Includes the tests from earlier years of a promoted student, like the report card.
+        var records = await PromotionEndpoints.EarlierRecordsAsync(db, id, ct);
+        records.Add(id);
         var recentTests = await db.TestResults.AsNoTracking()
-            .Where(r => r.StudentId == id)
+            .Where(r => records.Contains(r.StudentId))
             .OrderByDescending(r => r.Test.TestDate)
             .Take(5)
             .Select(r => new { r.Test.Title, Subject = r.Test.Subject.Name, r.Test.TestDate, r.Marks, r.Test.MaxMarks })
@@ -78,10 +70,8 @@ public static class StudentPortalEndpoints
             {
                 s.Id, s.FullName, s.Email, s.Phone, s.CourseName, s.AcademicYearName, s.AdmissionDate, s.Active
             },
-            fees = new { s.FeeAmount, s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status },
+            // No fees, payments or receipts here: those go to the student by email, and the agreed fee stays with the office.
             subjects,
-            payments = payments.Select(p => new { p.Id, p.Kind, receipt = StudentLedger.ReceiptLabel(p.ReceiptNumber), p.Amount, p.Method, p.PaidOn }),
-            adjustments,
             recentTests = recentTests.Select(t => new
             {
                 t.Title, t.Subject, t.TestDate, t.Marks, t.MaxMarks,
@@ -90,19 +80,14 @@ public static class StudentPortalEndpoints
         });
     }
 
-    private static async Task<IResult> Receipt(
-        Guid paymentId, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
-        await CurrentStudentIdAsync(db, currentUser, ct) is { } id
-            ? await PaymentEndpoints.ReceiptAsync(paymentId, id, db, access, currentUser, ct)
-            : NotLinked();
-
     private static async Task<IResult> ReportCard(AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
         await CurrentStudentIdAsync(db, currentUser, ct) is { } id
             ? await TestEndpoints.ReportCardAsync(id, db, access, currentUser, ct)
             : NotLinked();
 
     private static async Task<IResult> CreateLogin(
-        Guid id, LoginRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser, CancellationToken ct)
+        Guid id, LoginRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser,
+        Infrastructure.Email.EmailQueue emails, Microsoft.Extensions.Options.IOptions<Infrastructure.Email.AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         if (!Validate.Email(request.Email)) return ApiResults.Bad("Enter the email address the student will sign in with.");
         if (!PasswordRules.IsValid(request.Password)) return ApiResults.Bad(PasswordRules.Message);
@@ -127,6 +112,7 @@ public static class StudentPortalEndpoints
         sessions.SetPassword(user, request.Password!);
         db.Users.Add(user);
         if (student.Email.Length == 0) student.Email = email;
+        await AccountEmails.QueueWelcomeAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/users/{user.Id}", new { user.Id });
     }

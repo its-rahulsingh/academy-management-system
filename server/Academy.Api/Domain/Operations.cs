@@ -35,6 +35,8 @@ public sealed class EmailMessage : Entity
     public string ToAddress { get; set; } = "";
     public string Subject { get; set; } = "";
     public string Body { get; set; } = "";
+    /// <summary>The formatted version of the message's content (without the surrounding page), if it has one.</summary>
+    public string? HtmlBody { get; set; }
     /// <summary>PasswordReset, FeeReminder, Invoice, Welcome…</summary>
     public string Category { get; set; } = "";
     public EmailStatus Status { get; set; } = EmailStatus.Pending;

@@ -1,6 +1,8 @@
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
+using Academy.Api.Infrastructure.Email;
+using Microsoft.Extensions.Options;
 using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +48,7 @@ public static class UserEndpoints
 
     private static async Task<IResult> Create(
         CreateUserRequest request, AcademyDbContext db, SessionService sessions, TenantAccessService access,
-        ICurrentUser currentUser, CancellationToken ct)
+        ICurrentUser currentUser, EmailQueue emails, IOptions<AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         if (!Validate.Name(request.DisplayName, 140) || !Validate.Email(request.Email))
             return ApiResults.Bad("Enter a name and a valid email address.");
@@ -74,6 +76,7 @@ public static class UserEndpoints
         };
         sessions.SetPassword(user, request.Password!);
         db.Users.Add(user);
+        await AccountEmails.QueueWelcomeAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/users/{user.Id}", new { user.Id });
     }
@@ -107,7 +110,8 @@ public static class UserEndpoints
     }
 
     private static async Task<IResult> SetPassword(
-        Guid id, SetPasswordRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser, CancellationToken ct)
+        Guid id, SetPasswordRequest request, AcademyDbContext db, SessionService sessions, ICurrentUser currentUser,
+        EmailQueue emails, IOptions<AppOptions> appOptions, HttpContext http, CancellationToken ct)
     {
         var (user, error) = await FindManageableAsync(db, currentUser, id, ct);
         if (user is null) return error!;
@@ -115,6 +119,8 @@ public static class UserEndpoints
 
         sessions.SetPassword(user, request.Password!);
         user.MustChangePassword = user.Id != currentUser.UserId;
+        if (user.MustChangePassword)
+            await AccountEmails.QueuePasswordSetAsync(db, emails, AuthEndpoints.PublicBaseUrl(appOptions.Value, http), user, request.Password!, ct);
         await db.SaveChangesAsync(ct);
         return Results.Ok(new { success = true });
     }

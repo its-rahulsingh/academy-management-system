@@ -61,7 +61,6 @@ import { UI } from '../../shared/ui';
 
         <table class="compact">
           <tbody>
-            <tr><td>Total fee payable</td><td>{{ r.feePayable | money: true }}</td></tr>
             <tr><td>Total paid to date</td><td>{{ r.totalPaid | money: true }}</td></tr>
             <tr><td><strong>Balance due</strong></td><td><strong>{{ r.balanceDue | money: true }}</strong></td></tr>
           </tbody>

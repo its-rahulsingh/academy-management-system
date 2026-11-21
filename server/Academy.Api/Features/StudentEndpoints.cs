@@ -18,6 +18,8 @@ public static class StudentEndpoints
         string? FullName, string? Email, string? Phone, Guid CourseId, decimal FeeAmount, DateOnly? AdmissionDate, string? Remarks);
     public sealed record SetActiveRequest(bool Active);
     public sealed record AdjustmentRequest(AdjustmentKind Kind, decimal Amount, string? Reason);
+    /// <param name="FinalPayment">Paid now, if anything; the rest of the balance is written off.</param>
+    public sealed record SettleRequest(decimal? FinalPayment, string? Method, DateOnly? PaidOn, string? Reason);
     public sealed record VoidRequest(string? Reason);
 
     public sealed class StudentListQuery : PageQuery
@@ -39,6 +41,7 @@ public static class StudentEndpoints
         group.MapPut("/{id:guid}", Update).RequirePermission(Permissions.StudentsWrite);
         group.MapPut("/{id:guid}/active", SetActive).RequirePermission(Permissions.StudentsWrite);
         group.MapPost("/{id:guid}/adjustments", AddAdjustment).RequirePermission(Permissions.LedgerCorrect);
+        group.MapPost("/{id:guid}/settle", Settle).RequirePermission(Permissions.LedgerCorrect);
         group.MapPost("/adjustments/{adjustmentId:guid}/void", VoidAdjustment).RequirePermission(Permissions.LedgerCorrect);
         group.MapPost("/{id:guid}/reminder", SendReminder).RequirePermission(Permissions.RemindersSend);
         group.MapPost("/reminders", SendAllReminders).RequirePermission(Permissions.RemindersSend);
@@ -47,7 +50,7 @@ public static class StudentEndpoints
     private static object ToDto(StudentBalance s) => new
     {
         s.Id, s.AcademicYearId, s.AcademicYearName, s.FullName, s.Email, s.Phone, s.CourseId, s.CourseName, s.FeeAmount, s.AdmissionDate, s.Remarks, s.Active,
-        s.Discounts, s.Surcharges, s.Payable, s.Paid, s.Pending, s.Status
+        s.Discounts, s.Surcharges, s.Payable, s.Paid, s.WrittenOff, s.Pending, s.Status
     };
 
     private static IQueryable<StudentBalance> Search(IQueryable<StudentBalance> rows, string? search)
@@ -78,7 +81,9 @@ public static class StudentEndpoints
     private static async Task<IResult> Lookup(
         string? search, Guid? courseId, bool? dueOnly, bool? yearOnly, int? limit, AcademyDbContext db, AcademicYearScope years, CancellationToken ct)
     {
-        var rows = Search(db.StudentBalances().Where(r => r.Active), search);
+        // Inactive students still turn up while they owe money (e.g. last year's record of a promoted student).
+        var rows = Search(db.StudentBalances().Where(r => r.Active
+            || r.Received - r.Refunded + r.WrittenOff < r.FeeAmount - r.Discounts + r.Surcharges), search);
         if (yearOnly == true && await years.GetAsync(ct) is { } year) rows = rows.Where(r => r.AcademicYearId == year.Id);
         if (courseId is { } id) rows = rows.Where(r => r.CourseId == id);
         if (dueOnly == true) rows = rows.WithStatus("Due");
@@ -107,12 +112,24 @@ public static class StudentEndpoints
         {
             student = ToDto(student),
             login = await db.Users.Where(u => u.StudentId == id).Select(u => new { u.Email, u.Active }).FirstOrDefaultAsync(ct),
+            previousYears = await PreviousYearsAsync(db, id, ct),
             payments = payments.Select(p => new
             {
                 p.Id, p.Kind, receipt = StudentLedger.ReceiptLabel(p.ReceiptNumber), p.Amount, p.Method, p.PaidOn, p.Notes, p.Status, p.VoidReason
             }),
             adjustments
         });
+    }
+
+    /// <summary>For a promoted student: each earlier year's record and what is still unpaid there.</summary>
+    private static async Task<object> PreviousYearsAsync(AcademyDbContext db, Guid id, CancellationToken ct)
+    {
+        var earlier = await PromotionEndpoints.EarlierRecordsAsync(db, id, ct);
+        if (earlier.Count == 0) return Array.Empty<object>();
+        var rows = await db.StudentBalances().Where(s => earlier.Contains(s.Id)).ToListAsync(ct);
+        return rows.OrderByDescending(r => r.AdmissionDate)
+            .Select(r => new { r.Id, r.AcademicYearName, r.CourseName, due = r.Pending, r.Status })
+            .ToList();
     }
 
     private static string? ValidateStudent(StudentRequest request)
@@ -211,6 +228,8 @@ public static class StudentEndpoints
     {
         if (!Validate.Amount(request.Amount)) return ApiResults.Bad("Enter a positive amount.");
         if (!Validate.Reason(request.Reason)) return ApiResults.Bad("Give a reason for this adjustment.");
+        if (request.Kind is not (AdjustmentKind.Discount or AdjustmentKind.Surcharge))
+            return ApiResults.Bad("Choose a discount or a surcharge. Use Settle balance to write off what is left at the end.");
 
         return await db.InTransactionAsync<IResult>(async () =>
         {
@@ -223,6 +242,55 @@ public static class StudentEndpoints
             db.FeeAdjustments.Add(adjustment);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/students/{id}", new { adjustment.Id });
+        }, ct);
+    }
+
+    /// <summary>
+    /// Final settlement: records the last payment (if any) and writes off the rest of the balance, with a reason.
+    /// The student is then "Settled": nothing is due and reminders stop. The write-off is reported separately from
+    /// discounts, and can be voided like any other entry if it was a mistake.
+    /// </summary>
+    private static async Task<IResult> Settle(Guid id, SettleRequest request, AcademyDbContext db, EmailQueue emails, CancellationToken ct)
+    {
+        if (!Validate.Reason(request.Reason)) return ApiResults.Bad("Give a reason for the settlement, e.g. \"Final settlement agreed with parent\".");
+        var final = request.FinalPayment ?? 0;
+        if (final < 0 || (final > 0 && !Validate.Amount(final))) return ApiResults.Bad("Enter the final payment as a positive amount, or leave it empty.");
+        if (final > 0 && !PaymentMethods.IsValid(request.Method)) return ApiResults.Bad("Select how the final payment was made.");
+        var paidOn = Validate.DateOrToday(request.PaidOn);
+        if (paidOn > Validate.Today.AddDays(1)) return ApiResults.Bad("The date cannot be in the future.");
+
+        return await db.InTransactionAsync<IResult>(async () =>
+        {
+            if (!await db.LockStudentAsync(id, ct)) return Results.NotFound();
+            var balance = await db.StudentBalances().FirstAsync(r => r.Id == id, ct);
+            if (balance.Pending <= 0) return ApiResults.Bad("Nothing is due from this student, so there is nothing to settle.");
+            if (final >= balance.Pending)
+                return ApiResults.Bad($"{final:0.00} covers the whole balance of {balance.Pending:0.00}. Record it as a normal payment instead.");
+
+            string? receipt = null;
+            var emailed = false;
+            if (final > 0)
+            {
+                var payment = new StudentPayment
+                {
+                    StudentId = id,
+                    Kind = PaymentKind.Payment,
+                    ReceiptNumber = await db.NextCounterAsync(TenantCounter.Receipt, ct),
+                    Amount = final,
+                    Method = request.Method!,
+                    PaidOn = paidOn,
+                    Notes = "Final settlement"
+                };
+                db.StudentPayments.Add(payment);
+                receipt = StudentLedger.ReceiptLabel(payment.ReceiptNumber);
+                // Once settled nothing is due, so the receipt says so.
+                emailed = PaymentEndpoints.QueueReceipt(emails, db.CurrentTenantId, balance, payment, balance.Paid + final, 0);
+            }
+
+            var writtenOff = balance.Pending - final;
+            db.FeeAdjustments.Add(new FeeAdjustment { StudentId = id, Kind = AdjustmentKind.WriteOff, Amount = writtenOff, Reason = request.Reason!.Trim() });
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { receipt, finalPayment = final, writtenOff, emailed });
         }, ct);
     }
 

@@ -4,7 +4,7 @@ import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api'
 import { AuthService } from '../../core/auth.service';
 import { PAYMENT_METHODS, Paged, Payment, PaymentSummary, Permission } from '../../core/models';
 import { UI } from '../../shared/ui';
-import { PaymentDialogComponent, PaymentSaved } from './payment-dialog';
+import { PaymentDialogComponent, PaymentSaved, savedMessage } from './payment-dialog';
 
 @Component({
   selector: 'app-payments',
@@ -139,7 +139,7 @@ export class PaymentsComponent {
 
   protected saved(result: PaymentSaved, refund: boolean): void {
     this.dialog.set(null);
-    this.notify.success(`${refund ? 'Refund' : 'Payment'} recorded — receipt ${result.receipt}`);
+    this.notify.success(savedMessage(result, refund));
     this.reload();
   }
 

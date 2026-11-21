@@ -547,6 +547,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnName("created_at_utc")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("HtmlBody")
+                        .HasColumnType("text")
+                        .HasColumnName("html_body");
+
                     b.Property<string>("LastError")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -1359,6 +1363,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("phone");
 
+                    b.Property<Guid?>("PreviousStudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("previous_student_id");
+
                     b.Property<string>("Remarks")
                         .IsRequired()
                         .HasMaxLength(1200)
@@ -1377,6 +1385,11 @@ namespace Academy.Api.Data.Migrations
 
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_students_course_id");
+
+                    b.HasIndex("PreviousStudentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_students_previous_student_id")
+                        .HasFilter("previous_student_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "CourseId")
                         .HasDatabaseName("ix_students_tenant_id_course_id");
@@ -1726,6 +1739,10 @@ namespace Academy.Api.Data.Migrations
                     b.Property<bool>("AdmissionsOpen")
                         .HasColumnType("boolean")
                         .HasColumnName("admissions_open");
+
+                    b.Property<bool>("AutoApprovePackageClasses")
+                        .HasColumnType("boolean")
+                        .HasColumnName("auto_approve_package_classes");
 
                     b.Property<string>("CheckInSecret")
                         .IsRequired()
@@ -2230,6 +2247,12 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_students_courses_course_id");
+
+                    b.HasOne("Academy.Api.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("PreviousStudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_students_students_previous_student_id");
 
                     b.HasOne("Academy.Api.Domain.Tenant", null)
                         .WithMany()
