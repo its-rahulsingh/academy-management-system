@@ -140,7 +140,7 @@ public sealed class AuthAndAccessTests(AppFactory factory)
         var token = Regex.Match(body, @"token=([0-9A-F]+)").Groups[1].Value;
         const string newPassword = "a-brand-new-password";
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await browser.PostAsJsonAsync("/api/auth/reset-password", new { token, password = "short" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.PostAsJsonAsync("/api/auth/reset-password", new { token, password = "abcd" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.PostAsJsonAsync("/api/auth/reset-password", new { token, password = newPassword })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await browser.PostAsJsonAsync("/api/auth/reset-password", new { token, password = newPassword + "2" })).StatusCode);
 

@@ -154,13 +154,13 @@ type Dialog = 'details' | 'subscription' | 'superAdmin' | 'password' | 'markPaid
             <input id="saName" [(ngModel)]="superAdmin.name" maxlength="140" />
             <label for="saEmail">Email *</label>
             <input id="saEmail" type="email" [(ngModel)]="superAdmin.email" />
-            <label for="saPassword">Initial password * (at least 12 characters)</label>
+            <label for="saPassword">Initial password * (at least 5 characters)</label>
             <input id="saPassword" type="password" autocomplete="new-password" [(ngModel)]="superAdmin.password" />
           </app-modal>
         }
         @case ('password') {
           <app-modal [title]="'Reset password — ' + passwordFor()?.displayName" saveLabel="Set password" [busy]="form.busy()" [error]="form.error()" (closed)="close()" (saved)="savePassword(t)">
-            <label for="newPassword">New password * (at least 12 characters)</label>
+            <label for="newPassword">New password * (at least 5 characters)</label>
             <input id="newPassword" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
             <div class="helper">Re-enables the account if it was disabled. The user must choose their own password at next sign-in.</div>
           </app-modal>
@@ -324,7 +324,7 @@ export class AcademyDetailComponent {
 
   protected saveSuperAdmin(t: TenantDetail): void {
     if (!this.superAdmin.name.trim() || !this.superAdmin.email.trim()) return this.form.fail('Enter a name and email.');
-    if (this.superAdmin.password.length < 12) return this.form.fail('Password must contain at least 12 characters.');
+    if (this.superAdmin.password.length < 5) return this.form.fail('Password must contain at least 5 characters.');
     this.run(this.api.post(`platform/tenants/${t.id}/super-admins`, this.superAdmin), 'Super Admin login created');
   }
 
@@ -337,7 +337,7 @@ export class AcademyDetailComponent {
   protected savePassword(t: TenantDetail): void {
     const user = this.passwordFor();
     if (!user) return;
-    if (this.newPassword.length < 12) return this.form.fail('Password must contain at least 12 characters.');
+    if (this.newPassword.length < 5) return this.form.fail('Password must contain at least 5 characters.');
     this.run(this.api.put(`platform/tenants/${t.id}/users/${user.id}/password`, { password: this.newPassword }), 'Password reset');
   }
 

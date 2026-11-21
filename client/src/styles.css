@@ -537,3 +537,79 @@ label.subject-chip small { font-size: 10px; color: #a0a4b4; font-weight: 500; }
 .event-type.in { background: #e5fbf2; color: #17805d; }
 .event-type.out { background: #ffedf2; color: #b4325a; }
 .review-queue { border: 1px solid #ffe2b8; background: #fffaf1; }
+
+/* ---- Clock in / out ---- */
+.clock-card { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 16px; background: white; border: 1px solid #eceef5; margin-bottom: 16px; }
+.clock-card.running { background: linear-gradient(120deg, #e3f6ec, #f1fbf5); border-color: #bfe8d0; }
+.clock-main { flex: 1; min-width: 0; }
+.clock-main small { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #5d6177; }
+.clock-main strong { display: block; font-size: 16px; margin: 4px 0 2px; color: #1f2238; }
+.clock-main span { font-size: 11px; color: #6d7186; }
+.clock-timer { font-size: 30px !important; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: #136c49 !important; }
+.clock-dot { width: 12px; height: 12px; border-radius: 50%; background: #1fa971; flex-shrink: 0; box-shadow: 0 0 0 0 #1fa97166; animation: clock-pulse 1.6s infinite; }
+@keyframes clock-pulse { 0% { box-shadow: 0 0 0 0 #1fa97166; } 70% { box-shadow: 0 0 0 12px #1fa97100; } 100% { box-shadow: 0 0 0 0 #1fa97100; } }
+.clock-button { flex-shrink: 0; padding: 13px 20px; border-radius: 999px; background: #2c2a5a; color: white; font-weight: 800; font-size: 13px; }
+.clock-button:hover:not(:disabled) { background: #3a3679; }
+.clock-button:disabled { opacity: .45; cursor: not-allowed; }
+.clock-button.out { background: #c0344f; }
+.clock-button.out:hover { background: #a62a43; }
+.fab.running { background: #c0344f; }
+.clock-choice { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 15px 14px; margin-top: 16px; font-size: 13px; white-space: normal; }
+.clock-choice small { font-size: 10px; font-weight: 600; opacity: .8; }
+.clock-or { display: flex; align-items: center; gap: 10px; margin: 18px 0 0; color: #9195a7; font-size: 11px; }
+.clock-or::before, .clock-or::after { content: ''; flex: 1; height: 1px; background: #eceef5; }
+.clock-wait { display: grid; place-items: center; gap: 12px; padding: 34px 10px; color: #5d6177; font-size: 13px; }
+.spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #e4e2fb; border-top-color: #5147df; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.scanner { position: relative; overflow: hidden; border-radius: 14px; background: #111; aspect-ratio: 1; max-height: 60vh; margin: 0 auto 12px; }
+.scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scanner-frame { position: absolute; inset: 14%; border: 3px solid #ffffffcc; border-radius: 18px; box-shadow: 0 0 0 999px #0000004d; }
+.scanner-status { position: absolute; left: 10px; right: 10px; bottom: 10px; margin: 0; padding: 8px 10px; border-radius: 10px; background: #000000a6; color: white; font-size: 12px; text-align: center; }
+.scan-result { max-width: 520px; margin: 30px auto; }
+
+/* Staff: running classes and the check-in desk */
+.live-classes .surface-title h2 { display: flex; align-items: center; gap: 8px; }
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #c5c8d6; display: inline-block; }
+.live-dot.on { background: #1fa971; animation: clock-pulse 1.6s infinite; }
+.live-count { min-width: 30px; text-align: center; padding: 4px 10px; border-radius: 999px; background: #e5fbf2; color: #17805d; font-weight: 800; font-size: 13px; }
+.live-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-top: 1px solid #f0f1f6; }
+.live-row .mini-avatar { width: 34px; height: 34px; font-size: 11px; flex-shrink: 0; }
+.live-row.overdue { background: #fff6f8; }
+.live-main { flex: 1; min-width: 0; }
+.live-main strong { display: block; font-size: 13px; }
+.live-main small { display: block; font-size: 11px; color: #8a8fa3; margin-top: 2px; }
+.live-timer { font-size: 18px; font-variant-numeric: tabular-nums; color: #136c49; }
+.checkin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.checkin-qr { text-align: center; }
+.checkin-qr:fullscreen { display: flex; flex-direction: column; justify-content: center; background: white; padding: 40px; }
+.checkin-qr:fullscreen .qr-frame img { width: min(70vh, 80vw); height: auto; }
+.qr-frame { display: grid; place-items: center; padding: 10px; }
+.qr-frame img { width: min(320px, 100%); height: auto; image-rendering: pixelated; border-radius: 12px; border: 1px solid #eceef5; }
+.qr-placeholder { width: 320px; max-width: 100%; aspect-ratio: 1; display: grid; place-items: center; color: #9195a7; background: #f6f7fb; border-radius: 12px; }
+.qr-countdown { height: 5px; border-radius: 5px; background: #eceef5; overflow: hidden; margin: 6px auto 10px; max-width: 320px; }
+.qr-countdown span { display: block; height: 100%; background: #5147df; transition: width 1s linear; }
+.qr-steps { text-align: left; font-size: 12px; color: #5d6177; padding-left: 18px; margin: 12px 0 0; }
+.qr-steps li { margin: 6px 0; }
+
+/* Student portal */
+.teacher-hero.student { background: radial-gradient(circle at 85% 30%, #36b48a 0, transparent 42%), linear-gradient(120deg, #123c35 0%, #1c5a4c 55%, #2d8a6f 100%); }
+.tstat-value.small { font-size: 21px; }
+.student-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.panel-head .teacher-h2 { margin: 4px 0 8px; }
+@media (max-width: 900px) {
+  .checkin-grid, .student-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .clock-card { flex-wrap: wrap; }
+  .clock-button { width: 100%; }
+}
+
+/* Forgotten clock-ins and clock-outs */
+.clock-card.warning { background: #fff7ec; border-color: #ffd9a8; }
+.forgot-link { display: block; margin: -8px 0 16px 4px; font-size: 12px; }
+.late-box { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #fff7ec; border: 1px solid #ffe2b8; }
+.late-box p { margin: 0 0 4px; font-size: 12px; }
+.review-note { color: #9a5b12 !important; }
+.email-identity { margin-top: 22px; padding-top: 4px; border-top: 1px solid #eceef5; }
+.align-end { display: flex; align-items: flex-end; }

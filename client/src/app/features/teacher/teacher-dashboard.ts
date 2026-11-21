@@ -1,7 +1,8 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { Api, FormState, Notify, errorMessage } from '../../core/api';
 import { PortalOverview, PortalSession, PortalSessionList } from '../../core/models';
 import { UI, today } from '../../shared/ui';
+import { ClockPanelComponent } from './clock-panel';
 import { portalRefresh } from './teacher-shell';
 
 type View = 'all' | 'waiting' | 'approved' | 'paid' | 'removed';
@@ -40,15 +41,10 @@ export function duration(minutes: number): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-function nowTime(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-/** The faculty portal's home: this month at a glance, the session list, and logging a new session. */
+/** The faculty portal's home: clock in and out, this month at a glance, and the session list. */
 @Component({
   selector: 'app-teacher-dashboard',
-  imports: [UI],
+  imports: [UI, ClockPanelComponent],
   template: `
     @if (error()) {
       <div class="alert" role="alert">{{ error() }}</div>
@@ -70,6 +66,8 @@ function nowTime(): string {
         </div>
         <div class="hero-art" aria-hidden="true"><span>✎</span></div>
       </section>
+
+      <app-clock-panel [subjects]="activeSubjects()" (changed)="load()" />
 
       <div class="teacher-stats">
         <article class="tstat dark">
@@ -161,9 +159,7 @@ function nowTime(): string {
           <div class="teacher-empty">
             <div class="art" aria-hidden="true">✎</div>
             <strong>{{ view() === 'removed' ? 'Nothing withdrawn or rejected' : 'No sessions this month' }}</strong>
-            @if (canLog()) {
-              <p>Tap <b>Log session</b> after each class to send it for approval.</p>
-            }
+            <p>Tap <b>Clock in</b> when a class starts and <b>Clock out</b> when it ends.</p>
           </div>
         }
         @if (truncated()) {
@@ -171,42 +167,18 @@ function nowTime(): string {
         }
       </section>
 
-      @if (canLog()) {
-        <button type="button" class="fab" (click)="openLog()"><span aria-hidden="true">＋</span> Log session</button>
-      }
-    }
-
-    @if (form.open()) {
-      <app-modal title="Log session" saveLabel="Submit for approval" [busy]="form.busy()" [error]="form.error()" (closed)="form.close()" (saved)="submit()">
-        <label for="date">Date</label>
-        <input id="date" type="date" [max]="todayDate" [(ngModel)]="model.taughtOn" />
-        <div class="two-fields">
-          <div><label for="in">In time</label><input id="in" type="time" [(ngModel)]="model.startTime" /></div>
-          <div><label for="out">Out time</label><input id="out" type="time" [(ngModel)]="model.endTime" /></div>
-        </div>
-        @if (overview()?.subjects?.length) {
-          <label for="subject">Subject</label>
-          <select id="subject" [(ngModel)]="model.subjectId">
-            <option value="">Not specified</option>
-            @for (s of activeSubjects(); track s.id) {
-              <option [value]="s.id">{{ s.name }}</option>
-            }
-          </select>
+      <button type="button" class="fab" [class.running]="clockPanel()?.running()" (click)="clockPanel()?.open()">
+        @if (clockPanel()?.running()) {
+          <span aria-hidden="true">■</span> Clock out
+        } @else {
+          <span aria-hidden="true">▶</span> Clock in
         }
-        <label for="topic">Class or topic</label>
-        <input id="topic" [(ngModel)]="model.topic" maxlength="200" placeholder="e.g. Batch A — Thermodynamics" />
-        @if (minutes(); as m) {
-          <p class="helper calc">{{ m }} min × {{ overview()!.faculty.hourlyRate | money }} / hour = <strong>{{ pay() | money: true }}</strong></p>
-        } @else if (model.startTime && model.endTime) {
-          <p class="helper">The out time must be after the in time.</p>
-        }
-        <p class="helper">The academy checks each session before it counts towards your pay.</p>
-      </app-modal>
+      </button>
     }
 
     @if (withdrawTarget(); as target) {
       <app-modal title="Withdraw session?" saveLabel="Withdraw" [busy]="withdrawing.busy()" [error]="withdrawing.error()" (closed)="withdrawTarget.set(null)" (saved)="withdraw(target)">
-        <p>{{ target.taughtOn | day }}, {{ target.minutes }} min ({{ target.amount | money: true }}) will be taken back from approval. You can log it again if needed.</p>
+        <p>{{ target.taughtOn | day }}, {{ target.minutes }} min ({{ target.amount | money: true }}) will be taken back from approval and will not be paid.</p>
       </app-modal>
     }
   `,
@@ -217,7 +189,6 @@ export class TeacherDashboardComponent {
 
   protected readonly clock = clock;
   protected readonly duration = duration;
-  protected readonly todayDate = today();
   protected readonly thisMonth = monthOf(today());
   protected readonly tabs: { view: View; label: string }[] = [
     { view: 'all', label: 'All' },
@@ -235,20 +206,15 @@ export class TeacherDashboardComponent {
   protected readonly sessions = computed(() => this.list()?.items ?? []);
   protected readonly counts = computed(() => this.list()?.counts ?? { all: 0, waiting: 0, approved: 0, paid: 0, removed: 0 });
   protected readonly truncated = computed(() => this.sessions().length >= 500);
-  protected readonly canLog = computed(() => {
-    const f = this.overview()?.faculty;
-    return !!f && f.payType === 'Hourly' && f.active && f.hourlyRate > 0;
-  });
+  protected readonly clockPanel = viewChild(ClockPanelComponent);
   protected readonly activeSubjects = computed(() => (this.overview()?.subjects ?? []).filter(s => s.active));
   protected readonly monthLabel = computed(() => {
     const [y, m] = this.month().split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
   });
 
-  protected readonly form = new FormState();
   protected readonly withdrawing = new FormState();
   protected readonly withdrawTarget = signal<PortalSession | null>(null);
-  protected model = { taughtOn: today(), startTime: '', endTime: '', subjectId: '', topic: '' };
 
   constructor() {
     // Loads on start and again whenever the refresh button in the top bar is pressed.
@@ -258,7 +224,7 @@ export class TeacherDashboardComponent {
     });
   }
 
-  private load(): void {
+  protected load(): void {
     this.api.get<PortalOverview>('me/faculty', { month: this.month() }).subscribe({
       next: o => {
         this.error.set('');
@@ -298,44 +264,6 @@ export class TeacherDashboardComponent {
 
   protected stateLabel(s: PortalSession): string {
     return s.state === 'Approved' ? 'Approved · unpaid' : s.state === 'Waiting' ? 'Waiting approval' : s.state;
-  }
-
-  // ---- Logging a session ----
-
-  protected minutes(): number | null {
-    const start = toMinutes(this.model.startTime);
-    const end = toMinutes(this.model.endTime);
-    return start !== null && end !== null && end > start ? end - start : null;
-  }
-
-  protected pay(): number {
-    const rate = this.overview()?.faculty.hourlyRate ?? 0;
-    return Math.round(((this.minutes() ?? 0) * rate * 100) / 60) / 100;
-  }
-
-  protected openLog(): void {
-    const subjects = this.activeSubjects();
-    this.model = {
-      taughtOn: today(),
-      startTime: '',
-      endTime: nowTime(),
-      // Someone who teaches a single subject has it filled in.
-      subjectId: subjects.length === 1 ? subjects[0].id : '',
-      topic: '',
-    };
-    this.form.show();
-  }
-
-  protected submit(): void {
-    if (!this.model.taughtOn) return this.form.fail('Choose the date of the class.');
-    if (!this.model.startTime || !this.model.endTime) return this.form.fail('Enter the in time and the out time.');
-    if (!this.minutes()) return this.form.fail('The out time must be after the in time.');
-    const body = { ...this.model, subjectId: this.model.subjectId || null };
-    this.form.submit(this.api.post<{ minutes: number }>('me/faculty/sessions', body), result => {
-      this.notify.success(`${result.minutes} min sent for approval`);
-      if (monthOf(this.model.taughtOn) !== this.month() && monthOf(this.model.taughtOn) <= this.thisMonth) this.month.set(monthOf(this.model.taughtOn));
-      this.load();
-    });
   }
 
   protected withdraw(target: PortalSession): void {

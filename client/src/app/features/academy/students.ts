@@ -116,6 +116,20 @@ interface VoidTarget {
       </app-modal>
     }
 
+    @if (login.open()) {
+      <app-modal title="Give student portal login" saveLabel="Create login" [busy]="login.busy()" [error]="login.error()" (closed)="login.close()" (saved)="saveLogin()">
+        <p class="helper">
+          {{ loginModel.name }} will sign in with your academy code and this email to see their own fees, receipts and test results.
+          They cannot see anything else.
+        </p>
+        <label for="studentLoginEmail">Email *</label>
+        <input id="studentLoginEmail" type="email" [(ngModel)]="loginModel.email" autocomplete="off" />
+        <label for="studentLoginPassword">Initial password * (at least 5 characters)</label>
+        <input id="studentLoginPassword" type="password" autocomplete="new-password" [(ngModel)]="loginModel.password" />
+        <div class="helper">Share it with the student or parent. They choose their own password at first sign-in.</div>
+      </app-modal>
+    }
+
     @if (detail(); as d) {
       <app-modal [title]="d.student.fullName" saveLabel="" [wide]="true" [error]="detailError()" (closed)="closeDetail()">
         <div class="mini-stats">
@@ -128,6 +142,7 @@ interface VoidTarget {
           {{ d.student.courseName }} · {{ d.student.academicYearName }} · admitted {{ d.student.admissionDate | day }}
           @if (d.student.phone) { · {{ d.student.phone }} }
           @if (d.student.email) { · {{ d.student.email }} }
+          @if (d.login) { · Portal login: {{ d.login.email }}{{ d.login.active ? '' : ' (disabled)' }} }
         </p>
 
         <div class="button-row">
@@ -146,6 +161,9 @@ interface VoidTarget {
           }
           @if (can(permission.StudentsWrite)) {
             <button type="button" class="secondary" (click)="openForm(d.student)">Edit details</button>
+          }
+          @if (can(permission.UsersManage) && !d.login) {
+            <button type="button" class="secondary" (click)="openLogin(d.student)">Give portal login</button>
           }
           @if (can(permission.TestsRead)) {
             <a class="secondary" [routerLink]="['/app/tests/report-cards', d.student.id]">Report card</a>
@@ -259,6 +277,8 @@ export class StudentsComponent {
   protected model = this.blank();
 
   protected readonly detail = signal<StudentDetail | null>(null);
+  protected readonly login = new FormState();
+  protected loginModel = { studentId: '', name: '', email: '', password: '' };
   protected readonly detailError = signal('');
   protected readonly adjustment = new FormState();
   protected adjustmentModel = { kind: 'Discount' as 'Discount' | 'Surcharge', amount: 0, reason: '' };
@@ -323,6 +343,21 @@ export class StudentsComponent {
     this.api.get<StudentDetail>(`students/${id}`).subscribe({
       next: detail => this.detail.set(detail),
       error: e => this.pageError.set(errorMessage(e)),
+    });
+  }
+
+  protected openLogin(student: Student): void {
+    this.loginModel = { studentId: student.id, name: student.fullName, email: student.email, password: '' };
+    this.login.show();
+  }
+
+  protected saveLogin(): void {
+    const { studentId, name, email, password } = this.loginModel;
+    if (!email.trim()) return this.login.fail('Enter the email the student will sign in with.');
+    if (password.length < 5) return this.login.fail('The password must contain at least 5 characters.');
+    this.login.submit(this.api.post(`students/${studentId}/login`, { email, password }), () => {
+      this.notify.success(`Portal login created for ${name}`);
+      this.openDetail(studentId);
     });
   }
 

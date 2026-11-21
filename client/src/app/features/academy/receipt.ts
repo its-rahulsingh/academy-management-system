@@ -11,7 +11,11 @@ import { UI } from '../../shared/ui';
   template: `
     <div class="page-header no-print">
       <div>
-        <a class="text-button" routerLink="/app/payments">← Payments</a>
+        @if (portal()) {
+          <a class="text-button" routerLink="/student">← My fees</a>
+        } @else {
+          <a class="text-button" routerLink="/app/payments">← Payments</a>
+        }
         <h1>Receipt</h1>
       </div>
       <button type="button" class="primary" (click)="print()" [disabled]="!receipt()">🖶 Print</button>
@@ -75,12 +79,15 @@ export class ReceiptComponent {
   private readonly api = inject(Api);
   /** Payment id from the route. */
   readonly id = input.required<string>();
+  /** True inside the student portal, where a student sees only their own receipts. */
+  readonly portal = input(false);
   protected readonly receipt = signal<Receipt | null>(null);
   protected readonly error = signal('');
 
   constructor() {
     effect(() => {
-      this.api.get<Receipt>(`payments/${this.id()}/receipt`).subscribe({
+      const path = this.portal() ? `me/student/receipts/${this.id()}` : `payments/${this.id()}/receipt`;
+      this.api.get<Receipt>(path).subscribe({
         next: receipt => this.receipt.set(receipt),
         error: e => this.error.set(errorMessage(e)),
       });

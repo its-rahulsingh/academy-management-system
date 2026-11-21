@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Notify, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
@@ -7,12 +7,23 @@ import { UI } from '../../shared/ui';
 /** Tells the portal pages to fetch their data again (the refresh button in the top bar). */
 export const portalRefresh = signal(0);
 
+const PORTAL_NAV = {
+  teacher: [
+    { label: 'Dashboard', icon: '▦', link: '/teacher', exact: true },
+    { label: 'My payments', icon: '▣', link: '/teacher/payments', exact: false },
+  ],
+  student: [
+    { label: 'My dashboard', icon: '▦', link: '/student', exact: true },
+    { label: 'Report card', icon: '☑', link: '/student/report-card', exact: false },
+  ],
+};
+
 /**
- * Frame around the faculty portal. Deliberately simpler than the staff workspace: two pages, no sidebar,
- * built to be used on a phone right after a class.
+ * Frame around the faculty and student portals. Deliberately simpler than the staff workspace: a couple of pages,
+ * no sidebar, built to be used on a phone.
  */
 @Component({
-  selector: 'app-teacher-shell',
+  selector: 'app-portal-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, UI],
   template: `
     <div class="teacher">
@@ -27,8 +38,9 @@ export const portalRefresh = signal(0);
           </div>
         </div>
         <nav class="teacher-nav" aria-label="Portal">
-          <a routerLink="/teacher" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><span aria-hidden="true">▦</span> Dashboard</a>
-          <a routerLink="/teacher/payments" routerLinkActive="active"><span aria-hidden="true">▣</span> My payments</a>
+          @for (item of links(); track item.link) {
+            <a [routerLink]="item.link" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }"><span aria-hidden="true">{{ item.icon }}</span> {{ item.label }}</a>
+          }
           <button type="button" class="round" (click)="refresh()" title="Refresh" aria-label="Refresh">⟳</button>
           <button type="button" class="round" (click)="menuOpen.set(!menuOpen())" title="Account" aria-label="Account" [attr.aria-expanded]="menuOpen()">⚙</button>
           @if (menuOpen()) {
@@ -65,7 +77,7 @@ export const portalRefresh = signal(0);
         }
         <label for="current">Current password</label>
         <input id="current" type="password" autocomplete="current-password" [(ngModel)]="currentPassword" />
-        <label for="new">New password (at least 12 characters)</label>
+        <label for="new">New password (at least 5 characters)</label>
         <input id="new" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
         <label for="repeat">Repeat the new password</label>
         <input id="repeat" type="password" autocomplete="new-password" [(ngModel)]="repeatPassword" />
@@ -73,7 +85,10 @@ export const portalRefresh = signal(0);
     }
   `,
 })
-export class TeacherShellComponent {
+export class PortalShellComponent {
+  /** Which portal this is; set from the route's data. */
+  readonly nav = input<keyof typeof PORTAL_NAV>('teacher');
+  protected readonly links = computed(() => PORTAL_NAV[this.nav()]);
   protected readonly auth = inject(AuthService);
   protected readonly notify = inject(Notify);
   private readonly router = inject(Router);
@@ -102,7 +117,7 @@ export class TeacherShellComponent {
   }
 
   protected async changePassword(): Promise<void> {
-    if (this.newPassword.length < 12) return this.error.set('Password must contain at least 12 characters.');
+    if (this.newPassword.length < 5) return this.error.set('Password must contain at least 5 characters.');
     if (this.newPassword !== this.repeatPassword) return this.error.set('The two new passwords do not match.');
     this.busy.set(true);
     this.error.set('');

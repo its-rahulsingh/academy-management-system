@@ -7,7 +7,7 @@ export interface Paged<T> {
   pageSize: number;
 }
 
-export type Role = 'Owner' | 'SuperAdmin' | 'Admin' | 'Accountant' | 'Staff' | 'Faculty';
+export type Role = 'Owner' | 'SuperAdmin' | 'Admin' | 'Accountant' | 'Staff' | 'Faculty' | 'Student';
 export type LedgerStatus = 'Posted' | 'Voided';
 
 export interface Session {
@@ -66,6 +66,9 @@ export const Permission = {
   FacultyPortal: 'faculty.portal',
   /** The day-by-day activity report (Super Admin). */
   ReportsActivity: 'reports.activity',
+  /** Show the check-in QR code, see classes running now and stop one. */
+  AttendanceManage: 'attendance.manage',
+  StudentPortal: 'student.portal',
 } as const;
 
 // ---- Branding and admissions ----
@@ -76,6 +79,10 @@ export interface Branding {
   name: string;
   tagline: string;
   logoUrl: string | null;
+  /** The name the academy's emails show as sender; empty uses the academy name. */
+  emailSenderName: string;
+  /** Where replies to the academy's emails go. */
+  replyToEmail: string;
 }
 
 export interface PublicAcademy {
@@ -223,6 +230,8 @@ export interface FeeAdjustment {
 
 export interface StudentDetail {
   student: Student;
+  /** The student's portal login, if they have one. */
+  login: { email: string; active: boolean } | null;
   payments: Omit<Payment, 'studentId' | 'studentName'>[];
   adjustments: FeeAdjustment[];
 }
@@ -299,6 +308,79 @@ export interface FacultySession {
   endTime: string | null;
   review: SessionReview;
   reviewNote: string;
+  /** How the faculty member proved they were there, when the session came from clocking in and out. */
+  clock: { inMethod: ClockMethod; outMethod: ClockMethod | null; inDistanceMeters: number | null; outDistanceMeters: number | null } | null;
+}
+
+// ---- Clocking in and out ----
+
+export type ClockMethod = 'Qr' | 'Location' | 'Staff' | 'Manual' | 'Auto';
+
+export interface ClockStatus {
+  serverNowUtc: string;
+  running: { id: string; inAtUtc: string; inMethod: ClockMethod; subjectName: string | null } | null;
+  /** Classes left running past midnight and closed by the system; unpaid until an end time is entered. */
+  needsEndTime: { id: string; inAtUtc: string; subjectName: string | null }[];
+  locationAvailable: boolean;
+  radiusMeters: number;
+  maxClassMinutes: number;
+  canClockIn: boolean;
+}
+
+export interface ClockResult {
+  cancelled: boolean;
+  minutes: number;
+  amount: number;
+  review: SessionReview | null;
+}
+
+export interface LiveClass {
+  id: string;
+  facultyId: string;
+  facultyName: string;
+  subjectName: string | null;
+  inAtUtc: string;
+  inMethod: ClockMethod;
+  inDistanceMeters: number | null;
+  verifiedBy: string | null;
+  overdue: boolean;
+  reminded: boolean;
+}
+
+export interface LiveClasses {
+  serverNowUtc: string;
+  maxClassMinutes: number;
+  items: LiveClass[];
+  needsEndTime: { id: string; facultyId: string; facultyName: string; subjectName: string | null; inAtUtc: string; inMethod: ClockMethod }[];
+}
+
+export interface CheckInQr {
+  code: string;
+  url: string;
+  issuedAtUtc: string;
+  expiresInSeconds: number;
+  refreshSeconds: number;
+}
+
+export interface AttendanceSettings {
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+  enabled: boolean;
+  maxClassMinutes: number;
+}
+
+// ---- Student portal ----
+
+export interface StudentPortalOverview {
+  student: {
+    id: string; fullName: string; email: string; phone: string; courseName: string; academicYearName: string; admissionDate: string; active: boolean;
+  };
+  fees: { feeAmount: number; discounts: number; surcharges: number; payable: number; paid: number; pending: number; status: string };
+  subjects: { name: string; faculty: string[] }[];
+  payments: { id: string; kind: 'Payment' | 'Refund'; receipt: string; amount: number; method: string; paidOn: string }[];
+  adjustments: { kind: 'Discount' | 'Surcharge'; amount: number; reason: string; createdAtUtc: string }[];
+  recentTests: { title: string; subject: string; testDate: string; marks: number; maxMarks: number; percent: number }[];
 }
 
 // ---- Faculty portal ----

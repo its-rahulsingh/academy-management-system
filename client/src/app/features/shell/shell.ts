@@ -21,6 +21,7 @@ const ACADEMY_NAV: NavItem[] = [
   { label: 'Courses', icon: '▤', link: '/app/courses', permission: Permission.CoursesRead },
   { label: 'Subjects', icon: '❖', link: '/app/subjects', permission: Permission.CoursesRead },
   { label: 'Faculty', icon: '♧', link: '/app/faculty', permission: Permission.FacultyRead },
+  { label: 'Class check-in', icon: '◉', link: '/app/attendance', permission: Permission.AttendanceManage },
   { label: 'Payments', icon: '▣', link: '/app/payments', permission: Permission.PaymentsRead },
   { label: 'Expenses', icon: '▥', link: '/app/expenses', permission: Permission.ExpensesRead },
   { label: 'Tests', icon: '☑', link: '/app/tests', permission: Permission.TestsRead },
@@ -144,7 +145,7 @@ const PLATFORM_NAV: NavItem[] = [
         }
         <label for="current">Current password</label>
         <input id="current" type="password" autocomplete="current-password" [(ngModel)]="currentPassword" />
-        <label for="new">New password (at least 12 characters)</label>
+        <label for="new">New password (at least 5 characters)</label>
         <input id="new" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
         <label for="repeat">Repeat the new password</label>
         <input id="repeat" type="password" autocomplete="new-password" [(ngModel)]="repeatPassword" />
@@ -193,7 +194,7 @@ export class ShellComponent {
   }
 
   protected async changePassword(): Promise<void> {
-    if (this.newPassword.length < 12) return this.error.set('Password must contain at least 12 characters.');
+    if (this.newPassword.length < 5) return this.error.set('Password must contain at least 5 characters.');
     if (this.newPassword !== this.repeatPassword) return this.error.set('The two new passwords do not match.');
 
     this.busy.set(true);

@@ -318,6 +318,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("security_stamp");
 
+                    b.Property<Guid?>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
                     b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -334,6 +338,11 @@ namespace Academy.Api.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_app_users_faculty_id")
                         .HasFilter("faculty_id IS NOT NULL");
+
+                    b.HasIndex("StudentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_app_users_student_id")
+                        .HasFilter("student_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "Email")
                         .IsUnique()
@@ -742,6 +751,135 @@ namespace Academy.Api.Data.Migrations
                         .HasDatabaseName("ix_faculty_tenant_id_full_name");
 
                     b.ToTable("faculty", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultyClock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CorrectedEndUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("corrected_end_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("FacultyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("faculty_id");
+
+                    b.Property<double?>("InAccuracyMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("in_accuracy_meters");
+
+                    b.Property<DateTime>("InAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("in_at_utc");
+
+                    b.Property<double?>("InDistanceMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("in_distance_meters");
+
+                    b.Property<double?>("InLatitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("in_latitude");
+
+                    b.Property<double?>("InLongitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("in_longitude");
+
+                    b.Property<string>("InMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("in_method");
+
+                    b.Property<Guid?>("InVerifiedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("in_verified_by_user_id");
+
+                    b.Property<double?>("OutAccuracyMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("out_accuracy_meters");
+
+                    b.Property<DateTime?>("OutAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("out_at_utc");
+
+                    b.Property<double?>("OutDistanceMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("out_distance_meters");
+
+                    b.Property<double?>("OutLatitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("out_latitude");
+
+                    b.Property<double?>("OutLongitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("out_longitude");
+
+                    b.Property<string>("OutMethod")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("out_method");
+
+                    b.Property<Guid?>("OutVerifiedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("out_verified_by_user_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime?>("ReminderSentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reminder_sent_at_utc");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_faculty_clocks");
+
+                    b.HasIndex("FacultyId")
+                        .HasDatabaseName("ix_faculty_clocks_faculty_id");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_faculty_clocks_session_id");
+
+                    b.HasIndex("SubjectId")
+                        .HasDatabaseName("ix_faculty_clocks_subject_id");
+
+                    b.HasIndex("TenantId", "FacultyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_faculty_clocks_one_running")
+                        .HasFilter("out_at_utc IS NULL");
+
+                    b.HasIndex("TenantId", "OutAtUtc")
+                        .HasDatabaseName("ix_faculty_clocks_tenant_id_out_at_utc");
+
+                    b.ToTable("faculty_clocks", (string)null);
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.FacultyPayout", b =>
@@ -1589,6 +1727,12 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("admissions_open");
 
+                    b.Property<string>("CheckInSecret")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("check_in_secret");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1619,15 +1763,43 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnName("created_at_utc")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("EmailSenderName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("email_sender_name");
+
+                    b.Property<int>("GeofenceRadiusMeters")
+                        .HasColumnType("integer")
+                        .HasColumnName("geofence_radius_meters");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitude");
+
                     b.Property<int?>("LogoVersion")
                         .HasColumnType("integer")
                         .HasColumnName("logo_version");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitude");
+
+                    b.Property<int>("MaxClassMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_class_minutes");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
                         .HasColumnName("name");
+
+                    b.Property<string>("ReplyToEmail")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("reply_to_email");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1838,6 +2010,12 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_app_users_faculty_faculty_id");
 
+                    b.HasOne("Academy.Api.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_app_users_students_student_id");
+
                     b.HasOne("Academy.Api.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -1899,6 +2077,39 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_faculty_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.FacultyClock", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_clocks_faculty_faculty_id");
+
+                    b.HasOne("Academy.Api.Domain.FacultySession", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_faculty_clocks_faculty_sessions_session_id");
+
+                    b.HasOne("Academy.Api.Domain.Subject", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_faculty_clocks_subjects_subject_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faculty_clocks_tenants_tenant_id");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Subject");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.FacultyPayout", b =>

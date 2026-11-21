@@ -11,7 +11,7 @@ namespace Academy.Api.Features;
 /// <summary>
 /// A faculty member's own portal. Everything here is scoped to the faculty record linked to the signed-in login,
 /// so a faculty member can only ever see and submit their own sessions and pay.
-/// Sessions submitted here wait for staff approval before they count towards pay.
+/// Teaching time comes from clocking in and out (see AttendanceEndpoints).
 /// </summary>
 public static class FacultyPortalEndpoints
 {
@@ -26,8 +26,6 @@ public static class FacultyPortalEndpoints
         Withdrawn
     }
 
-    public sealed record SubmitRequest(DateOnly? TaughtOn, string? StartTime, string? EndTime, Guid? SubjectId, string? Topic);
-
     private const int MaxListed = 500;
 
     public static void MapFacultyPortalEndpoints(this RouteGroupBuilder academy)
@@ -35,7 +33,6 @@ public static class FacultyPortalEndpoints
         var group = academy.MapGroup("/me/faculty").RequirePermission(Permissions.FacultyPortal);
         group.MapGet("", Overview);
         group.MapGet("/sessions", Sessions);
-        group.MapPost("/sessions", Submit);
         group.MapPost("/sessions/{id:guid}/withdraw", Withdraw);
         group.MapGet("/payments", Payments);
     }
@@ -210,62 +207,6 @@ public static class FacultyPortalEndpoints
         };
 
         return Results.Ok(new { month = start.ToString("yyyy-MM"), counts, items = selected.Select(x => Shape(x.Row, x.State)) });
-    }
-
-    internal static bool TryParseTime(string? text, out TimeOnly time) =>
-        TimeOnly.TryParseExact((text ?? "").Trim(), ["HH:mm", "H:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
-
-    private static async Task<IResult> Submit(SubmitRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
-    {
-        if (await CurrentFacultyAsync(db, currentUser, ct) is not { } faculty) return NotLinked();
-        if (!faculty.Active) return ApiResults.Bad("Your faculty record is marked as not teaching. Ask the academy to update it.");
-        if (faculty.PayType != FacultyPayType.Hourly)
-            return ApiResults.Bad("You are paid a fixed package, so teaching time is not logged for pay. Ask the academy if this is wrong.");
-        if (faculty.HourlyRate <= 0) return ApiResults.Bad("The academy has not set your hourly rate yet.");
-
-        if (!TryParseTime(request.StartTime, out var startTime) || !TryParseTime(request.EndTime, out var endTime))
-            return ApiResults.Bad("Enter the in time and the out time.");
-        if (endTime <= startTime) return ApiResults.Bad("The out time must be after the in time (sessions cannot run past midnight).");
-        var minutes = (int)(endTime - startTime).TotalMinutes;
-        if (minutes < 1) return ApiResults.Bad("The session must be at least one minute long.");
-
-        var taughtOn = Validate.DateOrToday(request.TaughtOn);
-        if (taughtOn > Validate.Today.AddDays(1)) return ApiResults.Bad("The date cannot be in the future.");
-        if (request.SubjectId is { } subjectId
-            && !await db.FacultySubjects.AnyAsync(l => l.FacultyId == faculty.Id && l.SubjectId == subjectId, ct))
-            return ApiResults.Bad("Pick one of the subjects you teach.");
-
-        return await db.InTransactionAsync<IResult>(async () =>
-        {
-            if (!await db.LockFacultyAsync(faculty.Id, ct)) return NotLinked();
-
-            // The same hour cannot be claimed twice; withdrawn and rejected sessions no longer hold their slot.
-            var clash = await db.FacultySessions.AsNoTracking()
-                .Where(s => s.FacultyId == faculty.Id && s.TaughtOn == taughtOn && s.Status == LedgerStatus.Posted
-                            && s.Review != SessionReview.Rejected && s.StartTime != null && s.EndTime != null
-                            && s.StartTime < endTime && s.EndTime > startTime)
-                .Select(s => new { s.StartTime, s.EndTime })
-                .FirstOrDefaultAsync(ct);
-            if (clash is not null)
-                return ApiResults.Bad($"You already logged {clash.StartTime:HH\\:mm}–{clash.EndTime:HH\\:mm} on {taughtOn:dd MMM}. Sessions cannot overlap.");
-
-            var session = new FacultySession
-            {
-                FacultyId = faculty.Id,
-                TaughtOn = taughtOn,
-                StartTime = startTime,
-                EndTime = endTime,
-                Minutes = minutes,
-                HourlyRate = faculty.HourlyRate,
-                Amount = FacultySession.AmountFor(minutes, faculty.HourlyRate),
-                SubjectId = request.SubjectId,
-                Topic = Validate.Text(request.Topic, 200),
-                Review = SessionReview.Pending
-            };
-            db.FacultySessions.Add(session);
-            await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/me/faculty/sessions/{session.Id}", new { session.Id, session.Minutes, session.Amount });
-        }, ct);
     }
 
     private static async Task<IResult> Withdraw(Guid id, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)

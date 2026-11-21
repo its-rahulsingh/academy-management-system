@@ -11,7 +11,11 @@ import { UI } from '../../shared/ui';
   template: `
     <div class="page-header no-print">
       <div>
-        <a class="text-button" routerLink="/app/tests">← Tests &amp; results</a>
+        @if (portal()) {
+          <a class="text-button" routerLink="/student">← My dashboard</a>
+        } @else {
+          <a class="text-button" routerLink="/app/tests">← Tests &amp; results</a>
+        }
         <h1>Report card</h1>
       </div>
       <button type="button" class="primary" (click)="print()" [disabled]="!card()">🖶 Print</button>
@@ -100,7 +104,9 @@ import { UI } from '../../shared/ui';
 export class ReportCardComponent {
   private readonly api = inject(Api);
   /** Student id from the route. */
-  readonly id = input.required<string>();
+  readonly id = input('');
+  /** True inside the student portal: the signed-in student's own report card. */
+  readonly portal = input(false);
   protected readonly card = signal<StudentReportCard | null>(null);
   protected readonly error = signal('');
   /** Scores below this are shown in the warning colour. */
@@ -109,7 +115,8 @@ export class ReportCardComponent {
 
   constructor() {
     effect(() => {
-      this.api.get<StudentReportCard>(`tests/report-cards/${this.id()}`).subscribe({
+      const path = this.portal() ? 'me/student/report-card' : `tests/report-cards/${this.id()}`;
+      this.api.get<StudentReportCard>(path).subscribe({
         next: card => this.card.set(card),
         error: e => this.error.set(errorMessage(e)),
       });

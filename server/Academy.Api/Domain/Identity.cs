@@ -20,6 +20,8 @@ public sealed class AppUser : Entity
     public DateTime? LastLoginAtUtc { get; set; }
     /// <summary>Set only for a faculty portal login: the faculty record this account belongs to.</summary>
     public Guid? FacultyId { get; set; }
+    /// <summary>Set only for a student portal login: the student record this account belongs to.</summary>
+    public Guid? StudentId { get; set; }
 
     public static string NewStamp() => Guid.NewGuid().ToString("N");
 

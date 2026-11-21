@@ -9,7 +9,8 @@ const ROLE_HELP: Record<string, string> = {
   Admin: 'Everything except the subscription. Cannot manage Super Admins.',
   Accountant: 'Fees, refunds, expenses, payouts and reports. No user management.',
   Staff: 'Students, fee collection and test marks. No expenses, payouts or totals.',
-  Faculty: 'Faculty portal only: logs their own teaching time and sees their own pay. Created from the Faculty screen.',
+  Faculty: 'Faculty portal only: clocks in and out of classes and sees their own pay. Created from the Faculty screen.',
+  Student: 'Student portal only: sees their own fees, receipts and test results. Created from the student record.',
 };
 
 @Component({
@@ -64,9 +65,9 @@ const ROLE_HELP: Record<string, string> = {
           <label for="email">Email *</label>
           <input id="email" type="email" [(ngModel)]="model.email" />
         }
-        @if (model.role === 'Faculty') {
+        @if (model.role === 'Faculty' || model.role === 'Student') {
           <label>Role</label>
-          <p class="helper">Faculty — {{ roleHelp['Faculty'] }}</p>
+          <p class="helper">{{ model.role }} — {{ roleHelp[model.role] }}</p>
         } @else {
           <label for="role">Role *</label>
           <select id="role" [(ngModel)]="model.role">
@@ -77,7 +78,7 @@ const ROLE_HELP: Record<string, string> = {
           <div class="helper">{{ roleHelp[model.role] }}</div>
         }
         @if (!model.id) {
-          <label for="password">Initial password * (at least 12 characters)</label>
+          <label for="password">Initial password * (at least 5 characters)</label>
           <input id="password" type="password" autocomplete="new-password" [(ngModel)]="model.password" />
           <div class="helper">Share it privately. The user must choose their own password at first sign-in.</div>
         }
@@ -86,7 +87,7 @@ const ROLE_HELP: Record<string, string> = {
 
     @if (password.open()) {
       <app-modal [title]="'Reset password — ' + passwordFor()?.displayName" saveLabel="Set password" [busy]="password.busy()" [error]="password.error()" (closed)="password.close()" (saved)="savePassword()">
-        <label for="newPassword">New password * (at least 12 characters)</label>
+        <label for="newPassword">New password * (at least 5 characters)</label>
         <input id="newPassword" type="password" autocomplete="new-password" [(ngModel)]="newPassword" />
         <div class="helper">This signs the user out everywhere. They must choose their own password at next sign-in.</div>
       </app-modal>
@@ -135,7 +136,7 @@ export class UsersComponent {
   protected save(): void {
     const { id, displayName, email, role, password } = this.model;
     if (!displayName.trim()) return this.form.fail('Enter a name.');
-    if (!id && password.length < 12) return this.form.fail('Password must contain at least 12 characters.');
+    if (!id && password.length < 5) return this.form.fail('Password must contain at least 5 characters.');
 
     const request = id ? this.api.put(`users/${id}`, { displayName, role }) : this.api.post('users', { displayName, email, role, password });
     this.form.submit(request, () => {
@@ -153,7 +154,7 @@ export class UsersComponent {
   protected savePassword(): void {
     const user = this.passwordFor();
     if (!user) return;
-    if (this.newPassword.length < 12) return this.password.fail('Password must contain at least 12 characters.');
+    if (this.newPassword.length < 5) return this.password.fail('Password must contain at least 5 characters.');
     this.password.submit(this.api.put(`users/${user.id}/password`, { password: this.newPassword }), () => this.notify.success('Password reset'));
   }
 

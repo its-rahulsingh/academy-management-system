@@ -136,6 +136,26 @@ internal sealed class FacultySessionConfiguration : IEntityTypeConfiguration<Fac
     }
 }
 
+internal sealed class FacultyClockConfiguration : IEntityTypeConfiguration<FacultyClock>
+{
+    public void Configure(EntityTypeBuilder<FacultyClock> e)
+    {
+        e.ToTable("faculty_clocks");
+        e.HasCreatedAt();
+        e.Property(x => x.InMethod).IsEnumText();
+        e.Property(x => x.OutMethod).HasConversion<string>().HasMaxLength(20);
+        e.Property(x => x.Reason).HasMaxLength(500);
+        e.Ignore(x => x.NeedsEndTime);
+        // A faculty member can have only one class running at a time.
+        e.HasIndex(x => new { x.TenantId, x.FacultyId }).IsUnique().HasFilter("out_at_utc IS NULL").HasDatabaseName("ix_faculty_clocks_one_running");
+        e.HasIndex(x => new { x.TenantId, x.OutAtUtc });
+        e.HasIndex(x => x.SessionId);
+        e.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne<FacultySession>().WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class AdmissionApplicationConfiguration : IEntityTypeConfiguration<AdmissionApplication>
 {
     public void Configure(EntityTypeBuilder<AdmissionApplication> e)

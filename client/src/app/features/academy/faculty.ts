@@ -42,7 +42,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
       <section class="surface review-queue">
         <div class="surface-title">
           <h2>Waiting for approval</h2>
-          <small class="muted">{{ waiting.total() }} {{ waiting.total() === 1 ? 'session' : 'sessions' }} submitted from the faculty portal</small>
+          <small class="muted">{{ waiting.total() }} {{ waiting.total() === 1 ? 'class needs' : 'classes need' }} checking: clocked by location, longer than usual, times entered by hand, or stopped by an admin</small>
         </div>
         <div class="table-scroll">
           <table>
@@ -50,9 +50,14 @@ function sessionPay(minutes: number, hourlyRate: number): number {
             <tbody>
               @for (s of waiting.items(); track s.id) {
                 <tr>
-                  <td><strong>{{ s.facultyName }}</strong><small>{{ sessionLabel(s) || 'No topic given' }}</small></td>
+                  <td>
+                    <strong>{{ s.facultyName }}</strong><small>{{ sessionLabel(s) || 'No topic given' }}</small>
+                    @if (s.reviewNote) {
+                      <small class="review-note">{{ s.reviewNote }}</small>
+                    }
+                  </td>
                   <td>{{ s.taughtOn | day }}</td>
-                  <td>{{ timeLabel(s) }}</td>
+                  <td>{{ timeLabel(s) }}<small>{{ proofLabel(s) }}</small></td>
                   <td>{{ s.amount | money: true }}<small>{{ s.hourlyRate | money }} / hour</small></td>
                   <td class="row-actions">
                     <button type="button" class="table-action" [disabled]="reviewing()" (click)="approve(s)">✓ Approve</button>
@@ -302,7 +307,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
         </p>
         <label for="loginEmail">Email *</label>
         <input id="loginEmail" type="email" [(ngModel)]="loginModel.email" autocomplete="off" />
-        <label for="loginPassword">Initial password * (at least 12 characters)</label>
+        <label for="loginPassword">Initial password * (at least 5 characters)</label>
         <input id="loginPassword" type="password" autocomplete="new-password" [(ngModel)]="loginModel.password" />
         <div class="helper">Share it privately. They must choose their own password at first sign-in. Reset it later from the Users screen.</div>
       </app-modal>
@@ -405,6 +410,17 @@ export class FacultyComponent {
     return s.startTime ? `${clock(s.startTime)} – ${clock(s.endTime)} · ${s.minutes} min` : `${s.minutes} min`;
   }
 
+  /** How the faculty member proved they were at the academy. */
+  protected proofLabel(s: FacultySession): string {
+    const c = s.clock;
+    if (!c) return s.reviewNote;
+    if (c.inMethod === 'Manual') return 'Manual request — forgot to clock in';
+    const part = (method: string | null, distance: number | null) =>
+      method === 'Qr' ? 'QR' : method === 'Location' ? `location (${distance ?? '?'} m away)` : method === 'Staff' ? 'stopped by admin'
+        : method === 'Auto' ? 'not clocked out (closed at midnight)' : '—';
+    return `In: ${part(c.inMethod, c.inDistanceMeters)} · Out: ${part(c.outMethod, c.outDistanceMeters)}`;
+  }
+
   protected sessionStatus(s: FacultySession): string {
     if (s.status === 'Voided') return 'Voided';
     return s.review === 'Pending' ? 'Waiting approval' : s.review === 'Rejected' ? 'Rejected' : 'Approved';
@@ -448,7 +464,7 @@ export class FacultyComponent {
   protected saveLogin(): void {
     const { facultyId, email, password } = this.loginModel;
     if (!email.trim()) return this.login.fail('Enter the email they will sign in with.');
-    if (password.length < 12) return this.login.fail('The password must contain at least 12 characters.');
+    if (password.length < 5) return this.login.fail('The password must contain at least 5 characters.');
     this.login.submit(this.api.post(`faculty/${facultyId}/login`, { email, password }), () => {
       this.notify.success(`Portal login created for ${this.loginModel.name}`);
       this.load();

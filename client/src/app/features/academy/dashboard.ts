@@ -4,10 +4,11 @@ import { Api, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { Dashboard, Permission } from '../../core/models';
 import { UI, initials } from '../../shared/ui';
+import { LiveClassesComponent } from './live-classes';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, UI],
+  imports: [RouterLink, UI, LiveClassesComponent],
   template: `
     <div class="page-header">
       <div>
@@ -24,6 +25,10 @@ import { UI, initials } from '../../shared/ui';
 
     @if (error()) {
       <div class="alert" role="alert">{{ error() }}</div>
+    }
+
+    @if (auth.can(permission.AttendanceManage)) {
+      <div class="gap-bottom"><app-live-classes [showLink]="true" /></div>
     }
 
     @if (data(); as d) {

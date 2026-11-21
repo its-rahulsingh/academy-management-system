@@ -242,7 +242,11 @@ public static class FacultyEndpoints
             {
                 s.Id, s.FacultyId, FacultyName = s.Faculty.FullName, s.TaughtOn, s.StartTime, s.EndTime, s.Minutes, s.HourlyRate, s.Amount, s.Topic,
                 s.SubjectId, SubjectName = s.Subject != null ? s.Subject.Name : null,
-                s.Status, s.VoidReason, s.Review, s.ReviewNote
+                s.Status, s.VoidReason, s.Review, s.ReviewNote,
+                // How the faculty member proved they were there, for sessions that came from clocking in and out.
+                Clock = db.FacultyClocks.Where(c => c.SessionId == s.Id)
+                    .Select(c => new { c.InMethod, c.OutMethod, c.InDistanceMeters, c.OutDistanceMeters })
+                    .FirstOrDefault()
             })
             .ToPagedAsync(query, ct));
     }

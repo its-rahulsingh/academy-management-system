@@ -1,6 +1,7 @@
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
+using Academy.Api.Infrastructure.Email;
 using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,8 @@ public static class BrandingEndpoints
 
     public sealed record BrandingRequest(string? Tagline);
     public sealed record LogoRequest(string? DataUrl);
+    public sealed record EmailIdentityRequest(string? SenderName, string? ReplyTo);
+    public sealed record TestEmailRequest(string? To);
 
     public static string? LogoUrl(Guid tenantId, int? version) =>
         version is { } v ? $"/api/public/academies/{tenantId}/logo?v={v}" : null;
@@ -32,6 +35,10 @@ public static class BrandingEndpoints
             BrandingStore.SetLogoAsync(db, access, user.TenantId!.Value, request.DataUrl, ct));
         group.MapDelete("/logo", (AcademyDbContext db, TenantAccessService access, ICurrentUser user, CancellationToken ct) =>
             BrandingStore.RemoveLogoAsync(db, access, user.TenantId!.Value, ct));
+        group.MapPut("/email", (EmailIdentityRequest request, AcademyDbContext db, ICurrentUser user, CancellationToken ct) =>
+            BrandingStore.SetEmailIdentityAsync(db, user.TenantId!.Value, request, ct));
+        group.MapPost("/test-email", (TestEmailRequest request, AcademyDbContext db, IEmailTransport transport, ICurrentUser user, ILoggerFactory loggers, CancellationToken ct) =>
+            BrandingStore.SendTestAsync(db, transport, user.TenantId!.Value, request.To, loggers, ct));
     }
 
     /// <summary>Platform side: the owner sets branding for any academy.</summary>
@@ -45,6 +52,10 @@ public static class BrandingEndpoints
             BrandingStore.SetLogoAsync(db, access, id, request.DataUrl, ct));
         group.MapDelete("/logo", (Guid id, AcademyDbContext db, TenantAccessService access, CancellationToken ct) =>
             BrandingStore.RemoveLogoAsync(db, access, id, ct));
+        group.MapPut("/email", (Guid id, EmailIdentityRequest request, AcademyDbContext db, CancellationToken ct) =>
+            BrandingStore.SetEmailIdentityAsync(db, id, request, ct));
+        group.MapPost("/test-email", (Guid id, TestEmailRequest request, AcademyDbContext db, IEmailTransport transport, ILoggerFactory loggers, CancellationToken ct) =>
+            BrandingStore.SendTestAsync(db, transport, id, request.To, loggers, ct));
     }
 
     /// <summary>Anonymous: what the sign-in page shows once an academy code is typed, and the logo image itself.</summary>
@@ -61,11 +72,15 @@ public static class BrandingEndpoints
     {
         var tenant = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
-            .Select(t => new { t.Id, t.Code, t.Name, t.Tagline, t.LogoVersion })
+            .Select(t => new { t.Id, t.Code, t.Name, t.Tagline, t.LogoVersion, t.EmailSenderName, t.ReplyToEmail })
             .FirstOrDefaultAsync(ct);
         return tenant is null
             ? Results.NotFound()
-            : Results.Ok(new { tenant.Id, tenant.Code, tenant.Name, tenant.Tagline, logoUrl = LogoUrl(tenant.Id, tenant.LogoVersion) });
+            : Results.Ok(new
+            {
+                tenant.Id, tenant.Code, tenant.Name, tenant.Tagline, logoUrl = LogoUrl(tenant.Id, tenant.LogoVersion),
+                emailSenderName = tenant.EmailSenderName, replyToEmail = tenant.ReplyToEmail
+            });
     }
 
     private static async Task<IResult> PublicProfile(string code, AcademyDbContext db, CancellationToken ct)
@@ -98,6 +113,55 @@ public static class BrandingEndpoints
 /// <summary>Validation and storage shared by the academy and platform branding endpoints.</summary>
 public static class BrandingStore
 {
+    /// <summary>The name an academy's emails show, and where replies go. The mail itself always leaves from the platform's address.</summary>
+    public static async Task<IResult> SetEmailIdentityAsync(
+        AcademyDbContext db, Guid tenantId, BrandingEndpoints.EmailIdentityRequest request, CancellationToken ct)
+    {
+        var name = EmailSender.Clean(request.SenderName ?? "");
+        if ((request.SenderName ?? "").Trim().Length > EmailSender.MaxNameLength)
+            return ApiResults.Bad($"Keep the sender name to {EmailSender.MaxNameLength} characters.");
+        var replyTo = (request.ReplyTo ?? "").Trim().ToLowerInvariant();
+        if (replyTo.Length > 0 && !Validate.Email(replyTo)) return ApiResults.Bad("Enter a valid reply-to email address, or leave it blank.");
+
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null) return Results.NotFound();
+        tenant.EmailSenderName = name;
+        tenant.ReplyToEmail = replyTo;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { emailSenderName = tenant.EmailSenderName, replyToEmail = tenant.ReplyToEmail });
+    }
+
+    /// <summary>Sends one message straight away, as the academy, so the result (or the mail service's error) is seen at once.</summary>
+    public static async Task<IResult> SendTestAsync(
+        AcademyDbContext db, IEmailTransport transport, Guid tenantId, string? to, ILoggerFactory loggers, CancellationToken ct)
+    {
+        if (!Validate.Email(to)) return ApiResults.Bad("Enter the email address to send the test to.");
+        if (!transport.IsConfigured)
+            return ApiResults.Bad("Email sending is not set up on the platform yet. Ask the platform owner to configure it.");
+
+        var senders = await EmailSender.ForTenantsAsync(db, [tenantId], ct);
+        if (!senders.TryGetValue(tenantId, out var sender)) return Results.NotFound();
+        var message = new EmailMessage
+        {
+            TenantId = tenantId,
+            ToAddress = to!.Trim(),
+            Subject = $"Test email from {sender.FromName}",
+            Body = $"This is a test message from {sender.FromName}.\n\n"
+                   + (sender.ReplyTo is { } r ? $"Replies to this email go to {r}.\n" : "No reply-to address is set, so replies are not delivered to the academy.\n"),
+            Category = "Test"
+        };
+        try
+        {
+            await transport.SendAsync(message, sender, ct);
+            return Results.Ok(new { sent = true, from = sender.FromName, replyTo = sender.ReplyTo });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loggers.CreateLogger(typeof(BrandingStore)).LogWarning(ex, "Academy test email to {To} failed", message.ToAddress);
+            return ApiResults.Error(StatusCodes.Status502BadGateway, $"The email service refused the message: {ex.Message}");
+        }
+    }
+
     public static async Task<IResult> SetTaglineAsync(
         AcademyDbContext db, TenantAccessService access, Guid tenantId, string? tagline, CancellationToken ct)
     {

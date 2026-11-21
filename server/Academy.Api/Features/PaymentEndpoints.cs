@@ -142,10 +142,15 @@ public static class PaymentEndpoints
         }, ct);
     }
 
-    private static async Task<IResult> Receipt(Guid id, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
+    private static Task<IResult> Receipt(Guid id, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
+        ReceiptAsync(id, null, db, access, currentUser, ct);
+
+    /// <summary>A printable receipt. With <paramref name="onlyStudentId"/>, only that student's own payments are found.</summary>
+    internal static async Task<IResult> ReceiptAsync(
+        Guid id, Guid? onlyStudentId, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
     {
         var payment = await db.StudentPayments.AsNoTracking()
-            .Where(p => p.Id == id)
+            .Where(p => p.Id == id && (onlyStudentId == null || p.StudentId == onlyStudentId))
             .Select(p => new
             {
                 p.Id, p.Kind, p.ReceiptNumber, p.Amount, p.Method, p.PaidOn, p.Notes, p.Status, p.VoidReason, p.StudentId,

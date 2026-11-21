@@ -41,6 +41,7 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     public DbSet<FeeAdjustment> FeeAdjustments => Set<FeeAdjustment>();
     public DbSet<FacultyPayout> FacultyPayouts => Set<FacultyPayout>();
     public DbSet<FacultySession> FacultySessions => Set<FacultySession>();
+    public DbSet<FacultyClock> FacultyClocks => Set<FacultyClock>();
     public DbSet<AdmissionApplication> AdmissionApplications => Set<AdmissionApplication>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<AcademyTest> Tests => Set<AcademyTest>();
@@ -144,7 +145,7 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     private static readonly HashSet<string> SkippedProperties =
     [
         nameof(AppUser.SecurityStamp), nameof(AppUser.FailedLoginCount), nameof(AppUser.LockoutEndUtc),
-        nameof(AppUser.LastLoginAtUtc), nameof(Subscription.UpdatedAtUtc)
+        nameof(AppUser.LastLoginAtUtc), nameof(Subscription.UpdatedAtUtc), nameof(Tenant.CheckInSecret)
     ];
 
     private void AddAuditEntries()

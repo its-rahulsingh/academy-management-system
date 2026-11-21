@@ -92,7 +92,14 @@ export const ownerOnly: CanActivateFn = () => {
 export const academyOnly: CanActivateFn = () => {
   const auth = inject(AuthService);
   if (!auth.session().authenticated) return inject(Router).parseUrl('/login');
-  return auth.tenant() && !auth.isFaculty() ? true : inject(Router).parseUrl(auth.homeUrl());
+  return auth.tenant() && !auth.isFaculty() && !auth.isStudent() ? true : inject(Router).parseUrl(auth.homeUrl());
+};
+
+/** The student portal: only a student login whose academy has access. */
+export const studentOnly: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  if (!auth.session().authenticated) return inject(Router).parseUrl('/login');
+  return auth.isStudent() && auth.hasAccess() ? true : inject(Router).parseUrl(auth.homeUrl());
 };
 
 /** The faculty portal: only a faculty login whose academy has access. */

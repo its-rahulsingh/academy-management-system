@@ -83,7 +83,11 @@ public static class TestEndpoints
     /// One student's full test history, oldest first, with how the class did on each test.
     /// Not limited to the selected year: a report card covers everything the student has taken.
     /// </summary>
-    private static async Task<IResult> ReportCard(
+    private static Task<IResult> ReportCard(
+        Guid studentId, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct) =>
+        ReportCardAsync(studentId, db, access, currentUser, ct);
+
+    internal static async Task<IResult> ReportCardAsync(
         Guid studentId, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
     {
         var student = await db.Students.AsNoTracking()

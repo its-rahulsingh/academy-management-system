@@ -1,15 +1,22 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Academy.Api.Domain;
 using Academy.Api.Features;
 using Academy.Api.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 
 namespace Academy.Api.Tests;
 
 [Collection(AppCollection.Name)]
 public sealed class FacultyPortalTests(AppFactory factory)
 {
-    private static async Task<Guid> FacultyAsync(TestAcademy academy, string name = "Navin Saw", string payType = "Hourly", decimal rate = 600)
+    // The academy is at Connaught Place, New Delhi. ~45 m and ~3 km away for the location tests.
+    private const double AcademyLat = 28.6315, AcademyLon = 77.2167;
+    private const double NearLat = 28.6319, NearLon = 77.2167;
+    private const double FarLat = 28.6585, FarLon = 77.2167;
+
+    internal static async Task<Guid> FacultyAsync(TestAcademy academy, string name = "Navin Saw", string payType = "Hourly", decimal rate = 600)
     {
         var response = await academy.Admin.PostAsJsonAsync("/api/faculty", new { fullName = name, payType, hourlyRate = rate, agreedPayout = 50000 });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -17,7 +24,7 @@ public sealed class FacultyPortalTests(AppFactory factory)
     }
 
     /// <summary>Gives the faculty member a portal login and signs in with it.</summary>
-    private static async Task<HttpClient> PortalAsync(TestAcademy academy, Guid facultyId)
+    internal static async Task<HttpClient> PortalAsync(TestAcademy academy, Guid facultyId)
     {
         var email = $"faculty-{Guid.NewGuid():N}@{academy.Code}.test";
         var created = await academy.Admin.PostAsJsonAsync($"/api/faculty/{facultyId}/login", new { email, password = AppFactory.Password });
@@ -28,18 +35,26 @@ public sealed class FacultyPortalTests(AppFactory factory)
         return client;
     }
 
-    private static Task<HttpResponseMessage> SubmitAsync(HttpClient portal, string start, string end, string? date = null) =>
-        portal.PostAsJsonAsync("/api/me/faculty/sessions", new { taughtOn = date ?? DateTime.UtcNow.ToString("yyyy-MM-dd"), startTime = start, endTime = end, topic = "Algebra" });
+    private static async Task<string> QrCodeAsync(TestAcademy academy) =>
+        (await academy.Admin.GetJsonAsync("/api/attendance/qr"))["code"]!.GetValue<string>();
 
-    private static async Task<Guid> SubmittedIdAsync(HttpClient portal, string start, string end)
-    {
-        var response = await SubmitAsync(portal, start, end);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await response.ReadJsonAsync())["id"]!.GetValue<Guid>();
-    }
+    private static async Task<HttpResponseMessage> ClockInByQrAsync(TestAcademy academy, HttpClient portal) =>
+        await portal.PostAsJsonAsync("/api/me/faculty/clock/in", new { method = "Qr", code = await QrCodeAsync(academy) });
+
+    private static async Task<HttpResponseMessage> ClockOutByQrAsync(TestAcademy academy, HttpClient portal, string topic = "Algebra") =>
+        await portal.PostAsJsonAsync("/api/me/faculty/clock/out", new { method = "Qr", code = await QrCodeAsync(academy), topic });
+
+    /// <summary>Moves the faculty member's running class back in time, as if it started that many minutes ago.</summary>
+    private Task StartedMinutesAgoAsync(Guid facultyId, int minutes) =>
+        factory.WithDbAsync(db => db.FacultyClocks.IgnoreQueryFilters()
+            .Where(c => c.FacultyId == facultyId && c.OutAtUtc == null)
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.InAtUtc, DateTime.UtcNow.AddMinutes(-minutes))));
 
     private static async Task<JsonNode> FacultyRowAsync(TestAcademy academy, Guid id) =>
         (await academy.Admin.GetJsonAsync("/api/faculty")).AsArray().Single(f => f!["id"]!.GetValue<Guid>() == id)!;
+
+    private static Task SetLocationAsync(TestAcademy academy, int radius = 150) =>
+        academy.Admin.PutAsJsonAsync("/api/attendance/settings", new { latitude = AcademyLat, longitude = AcademyLon, radiusMeters = radius });
 
     [Fact]
     public async Task A_faculty_login_reaches_only_its_own_portal()
@@ -49,15 +64,11 @@ public sealed class FacultyPortalTests(AppFactory factory)
         var portal = await PortalAsync(academy, facultyId);
 
         Assert.Equal("Navin Saw", (await portal.GetJsonAsync("/api/me/faculty"))["faculty"]!["fullName"]!.GetValue<string>());
-        foreach (var url in new[] { "/api/dashboard", "/api/students", "/api/faculty", "/api/payouts", "/api/reports/summary", "/api/academic-years", "/api/users" })
+        foreach (var url in new[] { "/api/dashboard", "/api/students", "/api/faculty", "/api/payouts", "/api/reports/summary", "/api/academic-years", "/api/users", "/api/attendance/qr", "/api/attendance/live", "/api/me/student" })
             Assert.Equal(HttpStatusCode.Forbidden, (await portal.GetAsync(url)).StatusCode);
-
-        // Staff do not have a faculty portal.
         Assert.Equal(HttpStatusCode.Forbidden, (await academy.Admin.GetAsync("/api/me/faculty")).StatusCode);
 
-        var row = await FacultyRowAsync(academy, facultyId);
-        Assert.NotNull(row["login"]);
-        // One login per faculty member, and the Users screen cannot make faculty logins.
+        Assert.NotNull((await FacultyRowAsync(academy, facultyId))["login"]);
         Assert.Equal(HttpStatusCode.Conflict,
             (await academy.Admin.PostAsJsonAsync($"/api/faculty/{facultyId}/login", new { email = $"x-{Guid.NewGuid():N}@a.test", password = AppFactory.Password })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
@@ -65,38 +76,102 @@ public sealed class FacultyPortalTests(AppFactory factory)
     }
 
     [Fact]
-    public async Task Submitted_time_counts_only_once_approved_and_cannot_overlap()
+    public async Task A_class_clocked_in_and_out_by_qr_is_timed_by_the_server_and_approved_at_once()
     {
         var academy = await factory.NewAcademyAsync();
         var facultyId = await FacultyAsync(academy, rate: 600);
         var portal = await PortalAsync(academy, facultyId);
 
-        var first = await (await SubmitAsync(portal, "10:00", "11:25")).ReadJsonAsync();
-        Assert.Equal(85, first["minutes"]!.GetValue<int>());
-        Assert.Equal(850, first.Money("amount"));
+        Assert.Equal(HttpStatusCode.OK, (await ClockInByQrAsync(academy, portal)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await ClockInByQrAsync(academy, portal)).StatusCode);
+        var status = await portal.GetJsonAsync("/api/me/faculty/clock");
+        Assert.Equal("Qr", status["running"]!["inMethod"]!.GetValue<string>());
 
-        // Waiting for approval: nothing is owed yet.
-        Assert.Equal(0, (await FacultyRowAsync(academy, facultyId)).Money("earned"));
-        Assert.Equal(1, (await FacultyRowAsync(academy, facultyId))["pendingSessions"]!.GetValue<int>());
+        // Admins see who is teaching right now.
+        var live = (await academy.Admin.GetJsonAsync("/api/attendance/live"))["items"]!.AsArray();
+        Assert.Equal("Navin Saw", live.Single()!["facultyName"]!.GetValue<string>());
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await SubmitAsync(portal, "11:00", "12:00")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await SubmitAsync(portal, "12:00", "11:00")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await SubmitAsync(portal, "09:00", "10:00", DateTime.UtcNow.AddDays(3).ToString("yyyy-MM-dd"))).StatusCode);
-        var second = await SubmittedIdAsync(portal, "11:25", "12:55");
-
-        var firstId = first["id"]!.GetValue<Guid>();
-        Assert.Equal(HttpStatusCode.OK, (await academy.Admin.PostAsync($"/api/faculty-sessions/{firstId}/approve", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await academy.Admin.PostAsync($"/api/faculty-sessions/{firstId}/approve", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await academy.Admin.PostAsJsonAsync($"/api/faculty-sessions/{second}/reject", new { reason = "" })).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await academy.Admin.PostAsJsonAsync($"/api/faculty-sessions/{second}/reject", new { reason = "Class was cancelled" })).StatusCode);
+        await StartedMinutesAgoAsync(facultyId, 85);
+        var done = await (await ClockOutByQrAsync(academy, portal)).ReadJsonAsync();
+        Assert.Equal(85, done["minutes"]!.GetValue<int>());
+        Assert.Equal(850, done.Money("amount"));
+        Assert.Equal("Approved", done["review"]!.GetValue<string>());
 
         Assert.Equal(850, (await FacultyRowAsync(academy, facultyId)).Money("earned"));
-        Assert.Equal(850, (await academy.Admin.GetJsonAsync("/api/dashboard"))["finance"]!.Money("facultyPayable"));
+        Assert.Empty((await academy.Admin.GetJsonAsync("/api/attendance/live"))["items"]!.AsArray());
+        Assert.Equal(HttpStatusCode.Conflict, (await ClockOutByQrAsync(academy, portal)).StatusCode);
+    }
 
-        // The rejected slot is free again.
-        Assert.Equal(HttpStatusCode.Created, (await SubmitAsync(portal, "11:30", "12:00")).StatusCode);
-        var removed = await portal.GetJsonAsync("/api/me/faculty/sessions?view=removed");
-        Assert.Equal("Class was cancelled", removed["items"]!.AsArray().Single()!["note"]!.GetValue<string>());
+    [Fact]
+    public async Task Clocking_in_by_location_works_only_near_the_academy_and_waits_for_approval()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var facultyId = await FacultyAsync(academy, rate: 600);
+        var portal = await PortalAsync(academy, facultyId);
+        object Here(double lat, double lon) => new { method = "Location", latitude = lat, longitude = lon, accuracy = 20 };
+
+        // No academy location yet: only QR works.
+        Assert.Equal(HttpStatusCode.BadRequest, (await portal.PostAsJsonAsync("/api/me/faculty/clock/in", Here(NearLat, NearLon))).StatusCode);
+        await SetLocationAsync(academy);
+
+        var far = await portal.PostAsJsonAsync("/api/me/faculty/clock/in", Here(FarLat, FarLon));
+        Assert.Equal(HttpStatusCode.BadRequest, far.StatusCode);
+        Assert.Contains("km from the academy", await far.ErrorAsync());
+        Assert.Equal(HttpStatusCode.OK, (await portal.PostAsJsonAsync("/api/me/faculty/clock/in", Here(NearLat, NearLon))).StatusCode);
+
+        await StartedMinutesAgoAsync(facultyId, 60);
+        var done = await (await portal.PostAsJsonAsync("/api/me/faculty/clock/out", Here(NearLat, NearLon))).ReadJsonAsync();
+        Assert.Equal("Pending", done["review"]!.GetValue<string>());
+        Assert.Equal(0, (await FacultyRowAsync(academy, facultyId)).Money("earned"));
+
+        var waiting = (await academy.Admin.GetJsonAsync("/api/faculty-sessions?review=Pending"))["items"]!.AsArray().Single()!;
+        Assert.Equal("Location", waiting["clock"]!["inMethod"]!.GetValue<string>());
+        Assert.True(waiting["clock"]!["inDistanceMeters"]!.GetValue<double>() < 100);
+        Assert.Equal(HttpStatusCode.OK, (await academy.Admin.PostAsync($"/api/faculty-sessions/{waiting["id"]}/approve", null)).StatusCode);
+        Assert.Equal(600, (await FacultyRowAsync(academy, facultyId)).Money("earned"));
+    }
+
+    [Fact]
+    public async Task Under_a_minute_is_discarded_and_admins_can_stop_a_forgotten_class()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var facultyId = await FacultyAsync(academy);
+        var portal = await PortalAsync(academy, facultyId);
+
+        await ClockInByQrAsync(academy, portal);
+        Assert.True((await (await ClockOutByQrAsync(academy, portal)).ReadJsonAsync())["cancelled"]!.GetValue<bool>());
+
+        await ClockInByQrAsync(academy, portal);
+        await StartedMinutesAgoAsync(facultyId, 45);
+        var running = (await academy.Admin.GetJsonAsync("/api/attendance/live"))["items"]!.AsArray().Single()!;
+        var stopped = await (await academy.Admin.PostAsJsonAsync($"/api/attendance/{running["id"]}/stop", new { })).ReadJsonAsync();
+        Assert.Equal(45, stopped["minutes"]!.GetValue<int>());
+        Assert.Equal("Pending", stopped["review"]!.GetValue<string>());
+        Assert.Null((await portal.GetJsonAsync("/api/me/faculty/clock"))["running"]);
+    }
+
+    [Fact]
+    public async Task Check_in_codes_expire_and_cannot_be_forged_or_used_at_another_academy()
+    {
+        var secret = CheckInCodes.NewSecret();
+        var tenant = Guid.NewGuid();
+        var admin = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var code = CheckInCodes.Issue(secret, tenant, admin, now);
+
+        Assert.Equal(admin, CheckInCodes.Verify(secret, tenant, code, now.AddSeconds(30)).IssuerId);
+        Assert.NotNull(CheckInCodes.Verify(secret, tenant, code, now.AddSeconds(90)).Error);
+        Assert.NotNull(CheckInCodes.Verify(secret, Guid.NewGuid(), code, now).Error);
+        Assert.NotNull(CheckInCodes.Verify(CheckInCodes.NewSecret(), tenant, code, now).Error);
+        Assert.NotNull(CheckInCodes.Verify(secret, tenant, code[..^2] + (code[^2] == 'A' ? "BA" : "AA"), now).Error);
+        Assert.NotNull(CheckInCodes.Verify(secret, tenant, "not-a-code", now).Error);
+
+        // Another academy's real code is refused too.
+        var one = await factory.NewAcademyAsync();
+        var two = await factory.NewAcademyAsync();
+        var portal = await PortalAsync(one, await FacultyAsync(one));
+        var response = await portal.PostAsJsonAsync("/api/me/faculty/clock/in", new { method = "Qr", code = await QrCodeAsync(two) });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -105,59 +180,77 @@ public sealed class FacultyPortalTests(AppFactory factory)
         var academy = await factory.NewAcademyAsync();
         var facultyId = await FacultyAsync(academy, rate: 600);
         var portal = await PortalAsync(academy, facultyId);
-        foreach (var id in new[] { await SubmittedIdAsync(portal, "08:00", "09:00"), await SubmittedIdAsync(portal, "09:00", "10:00") })
-            await academy.Admin.PostAsync($"/api/faculty-sessions/{id}/approve", null);
-        await SubmittedIdAsync(portal, "10:00", "10:30");
+        foreach (var minutes in new[] { 60, 60 })
+            await academy.Admin.PostAsJsonAsync("/api/faculty-sessions", new { facultyId, minutes });
 
         Assert.Equal(HttpStatusCode.Created, (await academy.Admin.PostAsJsonAsync("/api/payouts", new { facultyId, amount = 600, method = "UPI" })).StatusCode);
 
         var sessions = await portal.GetJsonAsync("/api/me/faculty/sessions");
-        Assert.Equal(3, sessions["counts"]!["all"]!.GetValue<int>());
         Assert.Equal(1, sessions["counts"]!["paid"]!.GetValue<int>());
         Assert.Equal(1, sessions["counts"]!["approved"]!.GetValue<int>());
-        Assert.Equal(1, sessions["counts"]!["waiting"]!.GetValue<int>());
-
         var payments = await portal.GetJsonAsync("/api/me/faculty/payments");
         Assert.Equal(600, payments.Money("unpaid"));
         Assert.Equal(600, payments.Money("received"));
-        Assert.Equal(300, payments.Money("waitingAmount"));
-        Assert.Equal(600, payments["rates"]!.AsArray().Single()!.Money("hourlyRate"));
-
-        var overview = await portal.GetJsonAsync("/api/me/faculty");
-        Assert.Equal(120, overview["thisMonth"]!["minutes"]!.GetValue<int>());
-        Assert.Equal(1, overview["totals"]!["unpaidSessions"]!.GetValue<int>());
     }
 
     [Fact]
-    public async Task Only_waiting_sessions_can_be_withdrawn_and_only_by_their_owner()
-    {
-        var academy = await factory.NewAcademyAsync();
-        var portal = await PortalAsync(academy, await FacultyAsync(academy));
-        var other = await PortalAsync(academy, await FacultyAsync(academy, "Ritu Jain"));
-        var waiting = await SubmittedIdAsync(portal, "14:00", "15:00");
-        var approved = await SubmittedIdAsync(portal, "15:00", "16:00");
-        await academy.Admin.PostAsync($"/api/faculty-sessions/{approved}/approve", null);
-
-        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsync($"/api/me/faculty/sessions/{waiting}/withdraw", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await portal.PostAsync($"/api/me/faculty/sessions/{approved}/withdraw", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await portal.PostAsync($"/api/me/faculty/sessions/{waiting}/withdraw", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await academy.Admin.PostAsync($"/api/faculty-sessions/{waiting}/approve", null)).StatusCode);
-        // The other faculty member sees none of this.
-        Assert.Equal(0, (await other.GetJsonAsync("/api/me/faculty/sessions"))["counts"]!["all"]!.GetValue<int>());
-    }
-
-    [Fact]
-    public async Task Package_faculty_see_their_pay_but_do_not_log_time()
+    public async Task Package_faculty_clock_in_for_attendance_without_pay()
     {
         var academy = await factory.NewAcademyAsync();
         var facultyId = await FacultyAsync(academy, payType: "Package");
         var portal = await PortalAsync(academy, facultyId);
-        Assert.Equal(HttpStatusCode.BadRequest, (await SubmitAsync(portal, "10:00", "11:00")).StatusCode);
+        await ClockInByQrAsync(academy, portal);
+        await StartedMinutesAgoAsync(facultyId, 50);
+        var done = await (await ClockOutByQrAsync(academy, portal)).ReadJsonAsync();
+        Assert.Equal(50, done["minutes"]!.GetValue<int>());
+        Assert.Equal(0, done.Money("amount"));
+        Assert.Equal(50000, (await FacultyRowAsync(academy, facultyId)).Money("earned"));
+    }
+}
 
-        await academy.Admin.PostAsJsonAsync("/api/payouts", new { facultyId, amount = 20000, method = "Bank Transfer" });
-        var payments = await portal.GetJsonAsync("/api/me/faculty/payments");
-        Assert.Equal(30000, payments.Money("unpaid"));
-        Assert.Equal(20000, payments.Money("received"));
+[Collection(AppCollection.Name)]
+public sealed class StudentPortalTests(AppFactory factory)
+{
+    [Fact]
+    public async Task A_student_sees_only_their_own_fees_receipts_and_results()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var course = await academy.NewCourseAsync("Class 10", 20000);
+        var asha = await academy.NewStudentAsync(course, 20000, "Asha Rao");
+        var ravi = await academy.NewStudentAsync(course, 20000, "Ravi Kumar");
+        var ashaPayment = (await (await academy.PayAsync(asha, 5000)).ReadJsonAsync())["id"]!.GetValue<Guid>();
+        var raviPayment = (await (await academy.PayAsync(ravi, 7000)).ReadJsonAsync())["id"]!.GetValue<Guid>();
+
+        var email = $"asha-{Guid.NewGuid():N}@{academy.Code}.test";
+        Assert.Equal(HttpStatusCode.Created, (await academy.Admin.PostAsJsonAsync($"/api/students/{asha}/login", new { email, password = "asha1" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await academy.Admin.PostAsJsonAsync($"/api/students/{asha}/login", new { email = "x" + email, password = "asha1" })).StatusCode);
+        Assert.Equal(email, (await academy.Admin.GetJsonAsync($"/api/students/{asha}"))["login"]!["email"]!.GetValue<string>());
+
+        var portal = factory.NewBrowser();
+        Assert.Equal("Student", (await portal.LoginAsync(academy.Code, email, "asha1"))["user"]!["role"]!.GetValue<string>());
+
+        var me = await portal.GetJsonAsync("/api/me/student");
+        Assert.Equal("Asha Rao", me["student"]!["fullName"]!.GetValue<string>());
+        Assert.Equal(15000, me["fees"]!.Money("pending"));
+        Assert.Single(me["payments"]!.AsArray());
+
+        Assert.Equal(HttpStatusCode.OK, (await portal.GetAsync($"/api/me/student/receipts/{ashaPayment}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await portal.GetAsync($"/api/me/student/receipts/{raviPayment}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await portal.GetAsync("/api/me/student/report-card")).StatusCode);
+
+        foreach (var url in new[] { "/api/dashboard", "/api/students", $"/api/payments/{raviPayment}/receipt", $"/api/tests/report-cards/{ravi}", "/api/me/faculty" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await portal.GetAsync(url)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Passwords_need_at_least_five_characters()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var make = (string password) => academy.Admin.PostAsJsonAsync("/api/users",
+            new { displayName = "Desk", email = $"d-{Guid.NewGuid():N}@a.test", role = "Staff", password });
+        Assert.Equal(HttpStatusCode.BadRequest, (await make("abcd")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await make("abcde")).StatusCode);
     }
 }
 

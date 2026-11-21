@@ -17,7 +17,11 @@ Stack: Angular 21 · ASP.NET Core 10 · PostgreSQL · one Docker container (Rend
 | Admin | One academy | Everything except the subscription, academic years, logo/tagline and the daily activity report. Cannot manage Super Admins. |
 | Accountant | One academy | Fees, refunds, discounts, expenses, payouts, faculty teaching time, reports. |
 | Staff | One academy | Students, online admissions, fee collection, test marks. Sees no expenses, payouts or totals. |
-| Faculty | One faculty member | Their own portal only: logs teaching time for approval, sees their own sessions and pay. Created from the Faculty screen; does not count towards the plan's user limit. |
+| Faculty | One faculty member | Their own portal only: clocks in and out of classes, sees their own sessions and pay. Created from the Faculty screen. |
+| Student | One student | Their own portal only: fees, receipts, subjects and test results. Created from the student record. |
+
+Faculty and student logins do not count towards the plan's user limit. Passwords need at least 5 characters; five
+wrong attempts lock an account for 15 minutes.
 
 Endpoints require a *permission*; roles map to permissions in `server/Academy.Api/Infrastructure/Auth/Permissions.cs`.
 
@@ -26,7 +30,7 @@ Endpoints require a *permission*; roles map to permissions in `server/Academy.Ap
 Students and courses · fee payments with numbered, printable receipts · discounts, surcharges and refunds ·
 faculty and payouts · expenses · tests and report cards · dashboard · reports with CSV export ·
 email fee reminders · user management · activity log · online admission form with QR code · own logo and tagline ·
-faculty portal with session approval · day/week/month reports and a daily activity report in Excel.
+faculty portal with QR / location clock-in · student portal · day/week/month reports and a daily activity report in Excel.
 
 Money entries are never edited or deleted. A mistake is **voided** with a reason and re-entered, so totals always reconcile.
 
@@ -65,21 +69,38 @@ each class as whole **minutes** (e.g. 85 min); pay = minutes × hourly rate ÷ 6
 onto each logged session, so changing it later never re-prices past classes. Owed = earned − paid for both kinds, and
 payouts cannot exceed it. A logged session that has already been paid for cannot be voided until the payout is voided.
 
-### Faculty portal
+### Faculty portal: clock in and clock out
 
 A faculty member given a **portal login** (Faculty screen → *Give portal login*) signs in with the academy code and lands
-on their own portal (`/teacher`), built for a phone:
+on their own portal (`/teacher`), built for a phone. They only tap **Clock in** when a class starts and **Clock out**
+when it ends; the server's clock gives the minutes, and a live timer runs for them while the class is on.
 
-- **Dashboard**: time taught and earned this month, sessions waiting for approval, payment pending, their subjects, and
-  their sessions by month with All / Waiting / Approved / Paid tabs, search, and a list of withdrawn and rejected ones.
-- **Log session**: date, in time and out time; minutes and pay are worked out from the hourly rate. Sessions cannot
-  overlap, cannot run past midnight and cannot be in the future. A session still waiting can be withdrawn.
-- **My payments**: unpaid, received, waiting approval, last payment; unpaid and paid sessions, payments received, rates.
+- **QR code (the default).** An admin opens **Class check-in**, which shows a QR code that changes every 20 seconds
+  (each code works for one minute and is signed with the academy's own secret, so a photo of it is useless later).
+  The faculty member scans it with the portal's scanner, or with the phone's own camera app, which opens the portal.
+  A class clocked in *and* out by QR is **approved at once**.
+- **Location (when no admin is free).** The Super Admin sets the academy's location and an allowed distance on
+  **Academy profile**. Faculty can then clock in or out by location within that distance; those classes wait in
+  **Waiting for approval** on the Faculty screen, which shows how each end was proved (QR, or location and distance).
+- Under a minute is treated as a mistaken tap and discarded.
+- **Longest normal class** (Academy profile, default 3 hours): a longer class always goes for approval, even by QR, and
+  the faculty member is emailed once to clock out. Admins see a "probably forgot to clock out" alert.
+- **Late clock-out:** the faculty member can enter when the class really ended; an admin **stopping** a class can too.
+  Either way it goes for approval, with the tap time and the entered time both shown.
+- **Midnight:** a class still running is closed automatically ("needs an end time"), pays nothing until the faculty
+  member or an admin enters when it ended, and no longer blocks the next clock-in.
+- **Forgot to clock in:** the faculty member enters the date, start and end times and a reason (up to 31 days back).
+  It is marked as a manual request and always needs approval; it cannot overlap another class.
+- **Classes running now**, with live timers, is on the dashboard and the Class check-in page for Admins and Super Admins.
+- Package faculty clock in and out too; their classes are recorded as attendance at no extra pay.
+- The portal also has the month's figures, sessions by month (All / Waiting / Approved / Paid), and **My payments**.
+  Payouts are not tied to sessions, so a session shows as *Paid* once payouts cover it, oldest first.
 
-Submitted sessions wait in **Waiting for approval** on the Faculty screen, where staff with payout rights approve them or
-reject them with a reason the faculty member sees. Only approved sessions count towards pay. Payouts are not tied to
-sessions, so a session shows as *Paid* once payouts cover it, oldest first. Sessions logged before the portal existed
-count as approved.
+### Student portal
+
+A student given a **portal login** (student record → *Give portal login*) signs in with the academy code and sees
+(`/student`) their course and year, fee, discounts, paid and balance due, every receipt (printable), their subjects
+and who teaches them, latest test results and the full report card. Nothing else, and only their own records.
 
 ### Reports and the daily activity report
 
@@ -142,7 +163,11 @@ See `.env.example`. Required: `ConnectionStrings__AcademyDb`, `OWNER_EMAIL`, `OW
 
 Optional, each works without the other:
 
-- **Email (`Email__*`)** – password-reset links, welcome emails, fee reminders, invoices. Until configured, messages are written to the
+- **Email (`Email__*`)** – password-reset links, welcome emails, fee reminders, invoices, clock-out reminders.
+  Recommended: set `Email__BrevoApiKey` and `Email__FromAddress` (a sender on your Brevo-verified domain); mail then goes
+  through Brevo's API over HTTPS, which works on hosts that block mail ports. Each academy's mail shows the academy's
+  name as sender and replies go to the academy's own address (Academy profile → Emails); the mail itself always leaves
+  from the platform's verified address. SMTP (`Email__Host` and friends) still works instead. Until configured, messages are written to the
   server log and marked *failed – not configured*. Any SMTP service works, for example Brevo, Zoho ZeptoMail, Amazon SES,
   or a Google Workspace / Gmail account with an app password (fine for testing, low daily limits). Use a sender address on
   a domain you own and add the provider's SPF and DKIM records to that domain, or messages will land in spam. After
@@ -157,7 +182,7 @@ Needs .NET SDK 10, Node 20.19+/22.12+, PostgreSQL.
 ```bash
 # API (applies migrations and creates the owner on first start)
 export ConnectionStrings__AcademyDb='Host=localhost;Database=academyflow;Username=postgres;Password=...'
-export OWNER_EMAIL='you@example.com' OWNER_PASSWORD='at-least-12-characters'
+export OWNER_EMAIL='you@example.com' OWNER_PASSWORD='at-least-5-characters'
 dotnet run --project server/Academy.Api --urls http://localhost:5180
 
 # Frontend (proxies /api to :5180)

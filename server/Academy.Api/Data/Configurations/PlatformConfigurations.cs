@@ -38,6 +38,9 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         e.Property(x => x.ContactPhone).HasMaxLength(Columns.Phone);
         e.Property(x => x.SuspensionReason).HasMaxLength(500);
         e.Property(x => x.Tagline).HasMaxLength(120);
+        e.Property(x => x.CheckInSecret).HasMaxLength(64);
+        e.Property(x => x.EmailSenderName).HasMaxLength(100);
+        e.Property(x => x.ReplyToEmail).HasMaxLength(Columns.Email);
     }
 }
 
@@ -127,6 +130,9 @@ internal sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         // One portal login per faculty member.
         e.HasIndex(x => x.FacultyId).IsUnique().HasFilter("faculty_id IS NOT NULL");
         e.HasOne<Faculty>().WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
+        // One portal login per student.
+        e.HasIndex(x => x.StudentId).IsUnique().HasFilter("student_id IS NOT NULL");
+        e.HasOne<Student>().WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

@@ -89,7 +89,7 @@ import { UI } from '../../shared/ui';
           <div><label for="adminName">Full name *</label><input id="adminName" [(ngModel)]="model.superAdmin.name" maxlength="140" /></div>
           <div><label for="adminEmail">Email *</label><input id="adminEmail" type="email" [(ngModel)]="model.superAdmin.email" /></div>
         </div>
-        <label for="adminPassword">Initial password * (at least 12 characters)</label>
+        <label for="adminPassword">Initial password * (at least 5 characters)</label>
         <input id="adminPassword" type="password" autocomplete="new-password" [(ngModel)]="model.superAdmin.password" />
         <div class="helper">Share the code, email and password privately. They must choose their own password at first sign-in, and can then create their own staff logins.</div>
       </app-modal>
@@ -153,7 +153,7 @@ export class AcademiesComponent {
     if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(m.code.trim().toLowerCase())) return this.form.fail('Code must be 3-40 characters: lowercase letters, digits and hyphens.');
     if (!m.planId) return this.form.fail('Select a plan.');
     if (!m.superAdmin.name.trim() || !m.superAdmin.email.trim()) return this.form.fail("Enter the Super Admin's name and email.");
-    if (m.superAdmin.password.length < 12) return this.form.fail('Password must contain at least 12 characters.');
+    if (m.superAdmin.password.length < 5) return this.form.fail('Password must contain at least 5 characters.');
 
     this.form.submit(this.api.post<{ id: string }>('platform/tenants', m), created => {
       this.notify.success(`${m.name} created`);

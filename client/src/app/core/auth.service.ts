@@ -17,6 +17,8 @@ export class AuthService {
   readonly isOwner = computed(() => this.session().user?.role === 'Owner');
   /** A faculty member's own login: it sees the faculty portal only. */
   readonly isFaculty = computed(() => this.session().user?.role === 'Faculty');
+  /** A student's own login: it sees the student portal only. */
+  readonly isStudent = computed(() => this.session().user?.role === 'Student');
   /** True when an academy user's subscription lets them use the product. */
   readonly hasAccess = computed(() => this.session().access?.allowed === true);
 
@@ -29,6 +31,7 @@ export class AuthService {
     if (!this.session().authenticated) return '/';
     if (this.isOwner()) return '/platform';
     if (this.isFaculty()) return this.hasAccess() ? '/teacher' : '/locked';
+    if (this.isStudent()) return this.hasAccess() ? '/student' : '/locked';
     if (this.hasAccess()) return '/app/dashboard';
     return this.can('billing.manage') ? '/app/billing' : '/locked';
   }

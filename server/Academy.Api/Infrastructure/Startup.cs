@@ -44,7 +44,10 @@ public static class Startup
         services.Configure<AppOptions>(configuration.GetSection(AppOptions.Section));
         services.Configure<RazorpayOptions>(configuration.GetSection(RazorpayOptions.Section));
 
-        if (configuration.GetSection(EmailOptions.Section).Get<EmailOptions>() is { IsConfigured: true })
+        var email = configuration.GetSection(EmailOptions.Section).Get<EmailOptions>();
+        if (email is { IsConfigured: true, UsesBrevo: true })
+            services.AddHttpClient<IEmailTransport, BrevoEmailTransport>(client => client.Timeout = TimeSpan.FromSeconds(20));
+        else if (email is { IsConfigured: true })
             services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
         else
             services.AddSingleton<IEmailTransport, LogEmailTransport>();
@@ -56,6 +59,7 @@ public static class Startup
         {
             services.AddHostedService<EmailDispatchService>();
             services.AddHostedService<BillingCycleService>();
+            services.AddHostedService<ClassWatchService>();
         }
 
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -159,6 +163,8 @@ public static class Startup
         academy.MapPaymentEndpoints();
         academy.MapFacultyEndpoints();
         academy.MapFacultyPortalEndpoints();
+        academy.MapAttendanceEndpoints();
+        academy.MapStudentPortalEndpoints();
         academy.MapExpenseEndpoints();
         academy.MapTestEndpoints();
         academy.MapReportEndpoints();
@@ -210,7 +216,7 @@ public static class Startup
 
         if (!Validate.Email(email) || !PasswordRules.IsValid(password))
         {
-            app.Logger.LogWarning("No platform owner exists. Set OWNER_EMAIL and OWNER_PASSWORD (12+ characters) and restart to create one.");
+            app.Logger.LogWarning("No platform owner exists. Set OWNER_EMAIL and OWNER_PASSWORD (5+ characters) and restart to create one.");
             return;
         }
 

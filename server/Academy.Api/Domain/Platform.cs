@@ -28,6 +28,21 @@ public sealed class Tenant : Entity
     public int? LogoVersion { get; set; }
     /// <summary>Whether the public admission form accepts applications.</summary>
     public bool AdmissionsOpen { get; set; } = true;
+
+    /// <summary>Where the academy is, for faculty who clock in by location. Null until the Super Admin sets it.</summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    /// <summary>How far from <see cref="Latitude"/>/<see cref="Longitude"/> a location clock-in is accepted.</summary>
+    public int GeofenceRadiusMeters { get; set; } = 150;
+    /// <summary>Signs the rotating check-in QR codes. Created the first time a code is shown.</summary>
+    public string CheckInSecret { get; set; } = "";
+    /// <summary>A class running longer than this always goes for approval, and its faculty member is reminded.</summary>
+    public int MaxClassMinutes { get; set; } = 180;
+
+    /// <summary>The name the academy's emails show as their sender. Empty uses the academy name.</summary>
+    public string EmailSenderName { get; set; } = "";
+    /// <summary>Where replies to the academy's emails go, usually its office inbox. Empty means no reply address.</summary>
+    public string ReplyToEmail { get; set; } = "";
 }
 
 /// <summary>

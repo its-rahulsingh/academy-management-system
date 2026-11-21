@@ -106,6 +106,7 @@ public static class StudentEndpoints
         return Results.Ok(new
         {
             student = ToDto(student),
+            login = await db.Users.Where(u => u.StudentId == id).Select(u => new { u.Email, u.Active }).FirstOrDefaultAsync(ct),
             payments = payments.Select(p => new
             {
                 p.Id, p.Kind, receipt = StudentLedger.ReceiptLabel(p.ReceiptNumber), p.Amount, p.Method, p.PaidOn, p.Notes, p.Status, p.VoidReason

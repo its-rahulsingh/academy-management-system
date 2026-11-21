@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { academyOnly, facultyOnly, guestOnly, ownerOnly, requires } from './core/api';
+import { academyOnly, facultyOnly, guestOnly, ownerOnly, requires, studentOnly } from './core/api';
 import { Permission } from './core/models';
 
 /**
@@ -33,6 +33,7 @@ export const routes: Routes = [
       { path: 'expenses', canActivate: [requires(Permission.ExpensesRead)], loadComponent: () => import('./features/academy/expenses').then(m => m.ExpensesComponent) },
       { path: 'tests', canActivate: [requires(Permission.TestsRead)], loadComponent: () => import('./features/academy/tests').then(m => m.TestsComponent) },
       { path: 'reports', canActivate: [requires(Permission.ReportsRead)], loadComponent: () => import('./features/academy/reports').then(m => m.ReportsComponent) },
+      { path: 'attendance', canActivate: [requires(Permission.AttendanceManage)], loadComponent: () => import('./features/academy/attendance').then(m => m.AttendanceComponent) },
       { path: 'daily-report', canActivate: [requires(Permission.ReportsActivity)], loadComponent: () => import('./features/academy/daily-report').then(m => m.DailyReportComponent) },
       { path: 'users', canActivate: [requires(Permission.UsersManage)], loadComponent: () => import('./features/academy/users').then(m => m.UsersComponent) },
       { path: 'audit', canActivate: [requires(Permission.AuditRead)], loadComponent: () => import('./features/academy/audit').then(m => m.AuditComponent) },
@@ -45,10 +46,25 @@ export const routes: Routes = [
     // A faculty member's own portal: their teaching time and pay, nothing else.
     path: 'teacher',
     canActivate: [facultyOnly],
-    loadComponent: () => import('./features/teacher/teacher-shell').then(m => m.TeacherShellComponent),
+    loadComponent: () => import('./features/teacher/teacher-shell').then(m => m.PortalShellComponent),
+    data: { nav: 'teacher' },
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('./features/teacher/teacher-dashboard').then(m => m.TeacherDashboardComponent) },
       { path: 'payments', loadComponent: () => import('./features/teacher/teacher-payments').then(m => m.TeacherPaymentsComponent) },
+      // Opened from the admin's QR code with the phone's own camera: clocks in or out straight away.
+      { path: 'scan', loadComponent: () => import('./features/teacher/teacher-scan').then(m => m.TeacherScanComponent) },
+    ],
+  },
+  {
+    // A student's own portal: their fees, receipts and test results.
+    path: 'student',
+    canActivate: [studentOnly],
+    loadComponent: () => import('./features/teacher/teacher-shell').then(m => m.PortalShellComponent),
+    data: { nav: 'student' },
+    children: [
+      { path: '', pathMatch: 'full', loadComponent: () => import('./features/student/student-dashboard').then(m => m.StudentDashboardComponent) },
+      { path: 'report-card', data: { portal: true }, loadComponent: () => import('./features/academy/report-card').then(m => m.ReportCardComponent) },
+      { path: 'receipts/:id', data: { portal: true }, loadComponent: () => import('./features/academy/receipt').then(m => m.ReceiptComponent) },
     ],
   },
   {

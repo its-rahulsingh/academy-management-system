@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { PublicAcademy } from '../../core/models';
 import { BrandMarkComponent } from '../../shared/ui';
 
-const MIN_PASSWORD = 12;
+const MIN_PASSWORD = 5;
 
 @Component({
   selector: 'app-login',
@@ -163,7 +163,7 @@ export class ForgotPasswordComponent {
           @if (error()) {
             <div class="alert" role="alert">{{ error() }}</div>
           }
-          <label for="password">New password (at least 12 characters)</label>
+          <label for="password">New password (at least 5 characters)</label>
           <input id="password" name="password" type="password" [(ngModel)]="password" autocomplete="new-password" required />
           <label for="confirm">Repeat the new password</label>
           <input id="confirm" name="confirm" type="password" [(ngModel)]="confirm" autocomplete="new-password" required />
@@ -184,7 +184,7 @@ export class ResetPasswordComponent {
   protected readonly error = signal('');
 
   protected submit(): void {
-    if (this.password.length < MIN_PASSWORD) return this.error.set('Password must contain at least 12 characters.');
+    if (this.password.length < MIN_PASSWORD) return this.error.set('Password must contain at least 5 characters.');
     if (this.password !== this.confirm) return this.error.set('The two passwords do not match.');
 
     this.busy.set(true);

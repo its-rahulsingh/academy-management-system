@@ -14,8 +14,8 @@ namespace Academy.Api.Infrastructure.Auth;
 
 public static class PasswordRules
 {
-    public const int MinimumLength = 12;
-    public const string Message = "Password must contain at least 12 characters.";
+    public const int MinimumLength = 5;
+    public const string Message = "Password must contain at least 5 characters.";
 
     public static bool IsValid(string? password) => password is { Length: >= MinimumLength and <= 200 };
 }

@@ -194,6 +194,66 @@ public sealed class FacultySession : LedgerEntry
         decimal.Round(minutes * hourlyRate / 60m, 2, MidpointRounding.AwayFromZero);
 }
 
+/// <summary>How a faculty member proved they were at the academy when clocking in or out.</summary>
+public enum ClockMethod
+{
+    /// <summary>Scanned the QR code an admin showed. Trusted: a class clocked in and out this way is approved at once.</summary>
+    Qr,
+    /// <summary>Their phone's location was inside the academy's geofence. The class waits for approval.</summary>
+    Location,
+    /// <summary>A staff member stopped a running class (e.g. the faculty member forgot to clock out).</summary>
+    Staff,
+    /// <summary>A class the faculty member forgot to clock into, entered afterwards. Always needs approval.</summary>
+    Manual,
+    /// <summary>Closed by the system at midnight because nobody clocked out. Needs its real end time.</summary>
+    Auto
+}
+
+/// <summary>
+/// One class from clock-in to clock-out. While <see cref="OutAtUtc"/> is null the class is running; clocking out
+/// turns it into a <see cref="FacultySession"/> whose minutes come from the server's clock, never from typed times.
+/// </summary>
+public sealed class FacultyClock : TenantEntity
+{
+    public Guid FacultyId { get; set; }
+    public Faculty Faculty { get; set; } = null!;
+    public Guid? SubjectId { get; set; }
+    public Subject? Subject { get; set; }
+
+    public DateTime InAtUtc { get; set; }
+    public ClockMethod InMethod { get; set; }
+    /// <summary>The admin whose QR code was scanned.</summary>
+    public Guid? InVerifiedByUserId { get; set; }
+    public double? InLatitude { get; set; }
+    public double? InLongitude { get; set; }
+    public double? InAccuracyMeters { get; set; }
+    public double? InDistanceMeters { get; set; }
+
+    public DateTime? OutAtUtc { get; set; }
+    public ClockMethod? OutMethod { get; set; }
+    public Guid? OutVerifiedByUserId { get; set; }
+    public double? OutLatitude { get; set; }
+    public double? OutLongitude { get; set; }
+    public double? OutAccuracyMeters { get; set; }
+    public double? OutDistanceMeters { get; set; }
+
+    /// <summary>
+    /// When the class really ended, if that was entered by hand (a late clock-out, an admin stopping it, or an
+    /// auto-closed class being completed). <see cref="OutAtUtc"/> keeps when the button was actually pressed.
+    /// </summary>
+    public DateTime? CorrectedEndUtc { get; set; }
+    /// <summary>Why the class was entered by hand, for a forgotten clock-in.</summary>
+    public string Reason { get; set; } = "";
+    /// <summary>When the faculty member was emailed that the class was still running.</summary>
+    public DateTime? ReminderSentAtUtc { get; set; }
+
+    /// <summary>The teaching-time entry created at clock-out.</summary>
+    public Guid? SessionId { get; set; }
+
+    /// <summary>Closed at midnight by the system and still waiting for someone to enter when it really ended.</summary>
+    public bool NeedsEndTime => OutMethod == ClockMethod.Auto && SessionId == null;
+}
+
 public enum PaymentKind
 {
     Payment,
