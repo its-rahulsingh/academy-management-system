@@ -45,7 +45,9 @@ public static class Startup
         services.Configure<RazorpayOptions>(configuration.GetSection(RazorpayOptions.Section));
 
         var email = configuration.GetSection(EmailOptions.Section).Get<EmailOptions>();
-        if (email is { IsConfigured: true, UsesBrevo: true })
+        if (email is { IsConfigured: true, UsesResend: true })
+            services.AddHttpClient<IEmailTransport, ResendEmailTransport>(client => client.Timeout = TimeSpan.FromSeconds(20));
+        else if (email is { IsConfigured: true, UsesBrevo: true })
             services.AddHttpClient<IEmailTransport, BrevoEmailTransport>(client => client.Timeout = TimeSpan.FromSeconds(20));
         else if (email is { IsConfigured: true })
             services.AddSingleton<IEmailTransport, SmtpEmailTransport>();

@@ -37,7 +37,7 @@ public static class EmailAdminEndpoints
         return Results.Ok(new
         {
             configured = settings.IsConfigured,
-            host = !settings.IsConfigured ? null : settings.UsesBrevo ? "Brevo API" : $"{settings.Host}:{settings.Port}",
+            host = settings.IsConfigured ? settings.ServiceName : null,
             fromAddress = settings.IsConfigured ? settings.FromAddress : null,
             pending = counts.Where(c => c.Key == EmailStatus.Pending).Sum(c => c.Count),
             sent = counts.Where(c => c.Key == EmailStatus.Sent).Sum(c => c.Count),
@@ -52,7 +52,7 @@ public static class EmailAdminEndpoints
     {
         if (!Validate.Email(request.To)) return ApiResults.Bad("Enter a valid email address to send the test to.");
         if (!options.Value.IsConfigured)
-            return ApiResults.Bad("Email is not configured yet. Set Email__BrevoApiKey and Email__FromAddress (or the SMTP settings), then restart the server.");
+            return ApiResults.Bad("Email is not configured yet. Set Email__ResendApiKey (or Email__BrevoApiKey, or the SMTP settings) and Email__FromAddress, then restart the server.");
 
         var message = new EmailMessage
         {

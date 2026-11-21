@@ -164,8 +164,8 @@ See `.env.example`. Required: `ConnectionStrings__AcademyDb`, `OWNER_EMAIL`, `OW
 Optional, each works without the other:
 
 - **Email (`Email__*`)** – password-reset links, welcome emails, fee reminders, invoices, clock-out reminders.
-  Recommended: set `Email__BrevoApiKey` and `Email__FromAddress` (a sender on your Brevo-verified domain); mail then goes
-  through Brevo's API over HTTPS, which works on hosts that block mail ports. Each academy's mail shows the academy's
+  Recommended: set `Email__ResendApiKey` (or `Email__BrevoApiKey`) and `Email__FromAddress` (an address on the domain
+  you verified with that service); mail then goes through its API over HTTPS, which works on hosts that block mail ports. Each academy's mail shows the academy's
   name as sender and replies go to the academy's own address (Academy profile → Emails); the mail itself always leaves
   from the platform's verified address. SMTP (`Email__Host` and friends) still works instead. Until configured, messages are written to the
   server log and marked *failed – not configured*. Any SMTP service works, for example Brevo, Zoho ZeptoMail, Amazon SES,

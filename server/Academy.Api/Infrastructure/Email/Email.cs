@@ -26,10 +26,16 @@ public sealed class EmailOptions
     /// that block outgoing mail ports (such as Render's free plan). Host/Username/Password are then not needed.
     /// </summary>
     public string BrevoApiKey { get; set; } = "";
+    /// <summary>Resend's API key ("re_…"). Like Brevo, mail goes over HTTPS. Takes precedence over Brevo and SMTP.</summary>
+    public string ResendApiKey { get; set; } = "";
 
-    public bool UsesBrevo => !string.IsNullOrWhiteSpace(BrevoApiKey);
+    public bool UsesResend => !string.IsNullOrWhiteSpace(ResendApiKey);
+    public bool UsesBrevo => !UsesResend && !string.IsNullOrWhiteSpace(BrevoApiKey);
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(FromAddress) && (UsesBrevo || !string.IsNullOrWhiteSpace(Host));
+    /// <summary>What sends the mail, for the owner's email status page.</summary>
+    public string ServiceName => UsesResend ? "Resend API" : UsesBrevo ? "Brevo API" : $"{Host}:{Port}";
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(FromAddress) && (UsesResend || UsesBrevo || !string.IsNullOrWhiteSpace(Host));
 }
 
 /// <summary>
@@ -111,6 +117,40 @@ public sealed class SmtpEmailTransport(IOptions<EmailOptions> options) : IEmailT
             await client.AuthenticateAsync(settings.Username, settings.Password, ct);
         await client.SendAsync(mime, ct);
         await client.DisconnectAsync(true, ct);
+    }
+}
+
+/// <summary>Sends through Resend's email API over HTTPS (https://resend.com/docs/api-reference/emails/send-email).</summary>
+public sealed class ResendEmailTransport(HttpClient http, IOptions<EmailOptions> options) : IEmailTransport
+{
+    public const string Endpoint = "https://api.resend.com/emails";
+
+    public bool IsConfigured => true;
+
+    public async Task SendAsync(EmailMessage message, EmailSender? sender, CancellationToken ct)
+    {
+        var settings = options.Value;
+        var payload = new Dictionary<string, object?>
+        {
+            ["from"] = new MailboxAddress(sender?.FromName ?? settings.FromName, settings.FromAddress).ToString(),
+            ["to"] = new[] { message.ToAddress },
+            ["subject"] = message.Subject,
+            ["text"] = message.Body
+        };
+        if (sender?.ReplyTo is { } replyTo) payload["reply_to"] = replyTo;
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint) { Content = JsonContent.Create(payload) };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.ResendApiKey);
+        // The queue's row id, so a retry after a timeout cannot send the same email twice.
+        if (message.Id != Guid.Empty) request.Headers.Add("Idempotency-Key", message.Id.ToString());
+        using var response = await http.SendAsync(request, ct);
+        if (response.IsSuccessStatusCode) return;
+
+        // Resend explains refusals in JSON, e.g. {"statusCode":403,"message":"The domain is not verified…"}.
+        var body = await response.Content.ReadAsStringAsync(ct);
+        string? reason = null;
+        try { reason = JsonDocument.Parse(body).RootElement.GetProperty("message").GetString(); } catch (Exception) { /* not JSON */ }
+        throw new InvalidOperationException($"Resend refused the message ({(int)response.StatusCode}): {reason ?? body}");
     }
 }
 
