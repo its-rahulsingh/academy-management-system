@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { Api, FormState, Notify, PagedList, apiUrl, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { Faculty, FacultyAttendance, FacultyPayType, FacultySession, PAYMENT_METHODS, Paged, Payout, Permission, SubjectRef } from '../../core/models';
+import { RecordHistoryComponent } from '../../shared/record-history';
 import { UI, today } from '../../shared/ui';
 import { clock } from '../teacher/teacher-dashboard';
 import { SubjectPickerComponent } from './subjects';
@@ -13,7 +14,7 @@ function sessionPay(minutes: number, hourlyRate: number): number {
 
 @Component({
   selector: 'app-faculty',
-  imports: [UI, SubjectPickerComponent],
+  imports: [UI, SubjectPickerComponent, RecordHistoryComponent],
   template: `
     <div class="page-header">
       <div>
@@ -116,6 +117,9 @@ function sessionPay(minutes: number, hourlyRate: number): number {
                 }
                 @if (can(permission.UsersManage) && !f.login) {
                   <button type="button" class="table-action" (click)="openLogin(f)">Give portal login</button>
+                }
+                @if (can(permission.AuditRead)) {
+                  <button type="button" class="table-action" (click)="historyId.set(f.id)">History</button>
                 }
                 @if (can(permission.FacultyWrite)) {
                   <button type="button" class="table-action" (click)="openForm(f)">Edit →</button>
@@ -365,6 +369,10 @@ function sessionPay(minutes: number, hourlyRate: number): number {
         (confirmed)="confirmVoidSession(target, $event)"
       />
     }
+
+    @if (historyId(); as id) {
+      <app-record-history entityType="Faculty" [entityId]="id" (closed)="historyId.set(null)" />
+    }
   `,
 })
 export class FacultyComponent {
@@ -373,6 +381,8 @@ export class FacultyComponent {
   private readonly notify = inject(Notify);
 
   protected readonly permission = Permission;
+  /** The faculty member whose change history is open. */
+  protected readonly historyId = signal<string | null>(null);
   protected readonly methods = PAYMENT_METHODS;
   protected readonly faculty = signal<Faculty[]>([]);
   protected readonly hourly = computed(() => this.faculty().filter(f => f.payType === 'Hourly'));

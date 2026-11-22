@@ -131,6 +131,56 @@ payments, refunds, discounts and surcharges, expenses, faculty payouts, teaching
 plus totals by day, week or month. *Download Excel* gives the same grouping on one sheet and every entry, with filters,
 on another. Voided money and rejected or withdrawn teaching time are listed but left out of totals. Times are Indian time.
 
+### Expense proof
+
+Each expense can carry up to five bills, invoices or payment screenshots (photos or PDFs, 5 MB each), attached when it
+is recorded or later. Phone photos are shrunk in the browser before upload. Files are stored in the database
+(`expense_proofs`), because the server's own disk does not survive a restart on Render; the type is checked from the
+file's bytes, and only images and PDFs are accepted. The Expenses list shows 📎 with the number of files; the Excel
+export has a *Proof attached* column. A voided expense keeps its proof and it can no longer change. The Super Admin can
+set **Proof rule → required above ₹X**: larger expenses then cannot be saved without a bill, and their last bill cannot be
+removed. Removing a bill shows as a flag on the activity dashboard.
+
+### Activity log dashboard
+
+**Activity log → Dashboard** (Super Admin and Admin) turns the log into numbers and charts for a chosen period: total
+actions against the previous period, active users, money edits, deletions, after-hours actions and failed sign-ins;
+activity over time (created / changed / deleted, day, week or month); a busiest-hours heatmap; what was worked on; and
+activity by user. **Needs attention** flags actions worth a second look:
+
+| Flag | When |
+|---|---|
+| 🔴 Red | A payment or refund cancelled or its amount changed · a student's agreed fee lowered · a discount or write-off at or above the large-amount alert (default ₹5,000, Super Admin can change it) |
+| 🟠 Orange | An expense or faculty payment cancelled · a bill removed from an expense · a smaller discount given by someone other than the Super Admin · a smaller write-off · 5+ deletions or cancellations within 10 minutes · staff working between 10 PM and 6 AM · a sign-in from a network the account has not used before |
+| 🟡 Yellow | 3+ wrong passwords for an account in a day (orange at 10+) · a faculty class's time edited · a typed-in or corrected class approved |
+
+The Super Admin marks a flag **reviewed** to clear it (it can be reopened). Flags are worked out from the log each time;
+only the reviewed marks are stored. Wrong-password attempts are now logged for this. **History** (on a student, a
+faculty member, an expense, a flag or any row of the full log) shows that record's changes newest first, including its
+payments and discounts, bills, or classes and payouts.
+
+### Owner analytics
+
+**Platform → Analytics** (owner only) has five tabs. It shows counts, times and totals per academy, never an academy's
+own records.
+
+| Tab | What it shows |
+|---|---|
+| Business growth | Monthly recurring revenue, revenue earned per month (each invoice spread over the months it pays for) and collected, new / upgrade / downgrade / lost revenue, academies by state, trial conversion and days to pay, revenue by plan, renewals in the next 30 days, overdue invoices, academies at 80%+ of a plan limit, academies lost with the reason |
+| Academy health | A 0–100 score per academy (days active in the last 14, fees recorded, students added, features used), 🟢 active / 🟡 slowing / 🔴 going quiet (10+ idle days), last activity overall and per role, the set-up checklist and where academies get stuck, platform totals |
+| Feature usage | Each feature by use, academies using it (adoption), speed, phone share and main role, an 8-week trend, features nobody used, what each role does, faculty and student portal adoption, mobile vs desktop |
+| Peak hours & speed | Heatmap by day and hour (Indian time, also per academy), busiest hour, the quietest three hours to deploy in, busiest minute, most people online in an hour, typical and slowest-5% response times, slowest features, errors by feature, each academy's share of load and late-night use, background work (emails, invoices, auto-closed classes), deployment advice |
+| Capacity & cost | Database size against the plan limit, growth per month and when it will be full, bill files, the biggest tables, emails today against the daily limit, and per academy: storage, emails, load, share of hosting cost, revenue and margin |
+
+**How usage is tracked.** A middleware times every `/api` request and counts it in memory by academy, feature (named
+from the route), role, device and hour; once a minute the counts are added to `usage_hours`, the accounts seen to
+`usage_user_hours` and the busiest minute to `usage_peak_hours`. Hours follow Indian time. Rows hold counts and timings
+only, no user names or records. Session checks and sign-ins count towards load but not as features. The database size
+is recorded once a day (`database_size_days`). Hosting cost, the database limit and the daily email limit are set
+under **Hosting cost and limits** (defaults: 1 GB, 100 emails a day). Each academy's cost share is half by its requests
+and half by its storage. Usage figures start from the day this is deployed; revenue and health use existing data, so
+they cover the past too.
+
 ## Academic years
 
 Each academy has its own year master (Super Admin → **Academic years**). A new academy starts with an April–March year;

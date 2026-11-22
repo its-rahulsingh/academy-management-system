@@ -351,6 +351,37 @@ namespace Academy.Api.Data.Migrations
                     b.ToTable("app_users", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.AuditFlagReview", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTime>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<string>("ReviewedByName")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("reviewed_by_name");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.HasKey("TenantId", "Key")
+                        .HasName("pk_audit_flag_reviews");
+
+                    b.ToTable("audit_flag_reviews", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -681,6 +712,67 @@ namespace Academy.Api.Data.Migrations
                         .HasDatabaseName("ix_expenses_tenant_id_spent_on");
 
                     b.ToTable("expenses", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.ExpenseProof", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("data");
+
+                    b.Property<Guid>("ExpenseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("expense_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("file_name");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_expense_proofs");
+
+                    b.HasIndex("ExpenseId")
+                        .HasDatabaseName("ix_expense_proofs_expense_id");
+
+                    b.HasIndex("TenantId", "ExpenseId")
+                        .HasDatabaseName("ix_expense_proofs_tenant_id_expense_id");
+
+                    b.ToTable("expense_proofs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_expense_proofs_size", "octet_length(data) <= 5242880");
+                        });
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.Faculty", b =>
@@ -1307,6 +1399,29 @@ namespace Academy.Api.Data.Migrations
                     b.ToTable("plans", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.PlatformSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Key")
+                        .HasName("pk_platform_settings");
+
+                    b.ToTable("platform_settings", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.Student", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1786,9 +1901,19 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("email_sender_name");
 
+                    b.Property<decimal?>("ExpenseProofRequiredAbove")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("expense_proof_required_above");
+
                     b.Property<int>("GeofenceRadiusMeters")
                         .HasColumnType("integer")
                         .HasColumnName("geofence_radius_meters");
+
+                    b.Property<decimal>("LargeAmountAlert")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("large_amount_alert");
 
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision")
@@ -1956,6 +2081,139 @@ namespace Academy.Api.Data.Migrations
                     b.ToTable("test_results", (string)null);
                 });
 
+            modelBuilder.Entity("Academy.Api.Infrastructure.Usage.DatabaseSizeDay", b =>
+                {
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<long>("Bytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bytes");
+
+                    b.HasKey("Date")
+                        .HasName("pk_database_size_days");
+
+                    b.ToTable("database_size_days", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Infrastructure.Usage.UsageHour", b =>
+                {
+                    b.Property<DateTime>("HourUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hour_utc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Feature")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("feature");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.Property<string>("Device")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("device");
+
+                    b.Property<int>("ClientErrors")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_errors");
+
+                    b.Property<int>("MaxMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_ms");
+
+                    b.Property<int>("Over3s")
+                        .HasColumnType("integer")
+                        .HasColumnName("over3s");
+
+                    b.Property<int>("Requests")
+                        .HasColumnType("integer")
+                        .HasColumnName("requests");
+
+                    b.Property<int>("ServerErrors")
+                        .HasColumnType("integer")
+                        .HasColumnName("server_errors");
+
+                    b.Property<long>("TotalMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_ms");
+
+                    b.Property<int>("Under100Ms")
+                        .HasColumnType("integer")
+                        .HasColumnName("under100_ms");
+
+                    b.Property<int>("Under1s")
+                        .HasColumnType("integer")
+                        .HasColumnName("under1s");
+
+                    b.Property<int>("Under300Ms")
+                        .HasColumnType("integer")
+                        .HasColumnName("under300_ms");
+
+                    b.Property<int>("Under3s")
+                        .HasColumnType("integer")
+                        .HasColumnName("under3s");
+
+                    b.HasKey("HourUtc", "TenantId", "Feature", "Role", "Device")
+                        .HasName("pk_usage_hours");
+
+                    b.HasIndex("TenantId", "HourUtc")
+                        .HasDatabaseName("ix_usage_hours_tenant_id_hour_utc");
+
+                    b.ToTable("usage_hours", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Infrastructure.Usage.UsagePeakHour", b =>
+                {
+                    b.Property<DateTime>("HourUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hour_utc");
+
+                    b.Property<DateTime>("PeakMinuteUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("peak_minute_utc");
+
+                    b.Property<int>("PeakPerMinute")
+                        .HasColumnType("integer")
+                        .HasColumnName("peak_per_minute");
+
+                    b.HasKey("HourUtc")
+                        .HasName("pk_usage_peak_hours");
+
+                    b.ToTable("usage_peak_hours", (string)null);
+                });
+
+            modelBuilder.Entity("Academy.Api.Infrastructure.Usage.UsageUserHour", b =>
+                {
+                    b.Property<DateTime>("HourUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hour_utc");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("HourUtc", "UserId")
+                        .HasName("pk_usage_user_hours");
+
+                    b.HasIndex("TenantId", "HourUtc")
+                        .HasDatabaseName("ix_usage_user_hours_tenant_id_hour_utc");
+
+                    b.ToTable("usage_user_hours", (string)null);
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.AcademicYear", b =>
                 {
                     b.HasOne("Academy.Api.Domain.Tenant", null)
@@ -2040,6 +2298,16 @@ namespace Academy.Api.Data.Migrations
                         .HasConstraintName("fk_app_users_tenants_tenant_id");
                 });
 
+            modelBuilder.Entity("Academy.Api.Domain.AuditFlagReview", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audit_flag_reviews_tenants_tenant_id");
+                });
+
             modelBuilder.Entity("Academy.Api.Domain.Course", b =>
                 {
                     b.HasOne("Academy.Api.Domain.Tenant", null)
@@ -2084,6 +2352,25 @@ namespace Academy.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_expenses_tenants_tenant_id");
+                });
+
+            modelBuilder.Entity("Academy.Api.Domain.ExpenseProof", b =>
+                {
+                    b.HasOne("Academy.Api.Domain.Expense", "Expense")
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_expense_proofs_expenses_expense_id");
+
+                    b.HasOne("Academy.Api.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_expense_proofs_tenants_tenant_id");
+
+                    b.Navigation("Expense");
                 });
 
             modelBuilder.Entity("Academy.Api.Domain.Faculty", b =>

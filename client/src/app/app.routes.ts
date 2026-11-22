@@ -77,6 +77,7 @@ export const routes: Routes = [
       { path: 'academies/:id', loadComponent: () => import('./features/platform/academy-detail').then(m => m.AcademyDetailComponent) },
       { path: 'plans', loadComponent: () => import('./features/platform/plans').then(m => m.PlansComponent) },
       { path: 'invoices', loadComponent: () => import('./features/platform/invoices').then(m => m.InvoicesComponent) },
+      { path: 'analytics', loadComponent: () => import('./features/platform/analytics').then(m => m.PlatformAnalyticsComponent) },
       { path: 'audit', loadComponent: () => import('./features/academy/audit').then(m => m.AuditComponent), data: { platform: true } },
     ],
   },

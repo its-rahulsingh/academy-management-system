@@ -283,12 +283,14 @@ public static class ReportEndpoints
 
             case "expenses":
                 title = "Expenses";
-                headers = ["Date", "Title", "Category", "Method", "Amount", "Status", "Notes", "Void reason"];
+                headers = ["Date", "Title", "Category", "Method", "Amount", "Status", "Proof attached", "Notes", "Void reason"];
                 money = new HashSet<int> { 4 };
                 rows = (await db.Expenses.AsNoTracking()
                     .Where(e => e.SpentOn >= start && e.SpentOn <= end)
-                    .OrderBy(e => e.SpentOn).Take(MaxExportRows).ToListAsync(ct))
-                    .Select(e => new object?[] { e.SpentOn, e.Title, e.Category, e.Method, e.Amount, e.Status.ToString(), e.Notes, e.VoidReason })
+                    .OrderBy(e => e.SpentOn).Take(MaxExportRows)
+                    .Select(e => new { e.SpentOn, e.Title, e.Category, e.Method, e.Amount, e.Status, e.Notes, e.VoidReason, Proofs = db.ExpenseProofs.Count(p => p.ExpenseId == e.Id) })
+                    .ToListAsync(ct))
+                    .Select(e => new object?[] { e.SpentOn, e.Title, e.Category, e.Method, e.Amount, e.Status.ToString(), e.Proofs > 0 ? $"Yes ({e.Proofs})" : "No", e.Notes, e.VoidReason })
                     .ToList();
                 break;
 

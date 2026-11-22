@@ -83,13 +83,16 @@ public static class Permissions
     public const string AttendanceManage = "attendance.manage";
     /// <summary>A student's own portal: their fees, receipts and test results.</summary>
     public const string StudentPortal = "student.portal";
+    /// <summary>Academy-wide rules: when an expense needs a bill, and the amount that raises a red flag.</summary>
+    public const string SettingsManage = "settings.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
         DashboardFinance, StudentsRead, StudentsWrite, CoursesRead, CoursesWrite, FacultyRead, FacultyWrite,
         PaymentsRead, PaymentsWrite, LedgerCorrect, PayoutsRead, PayoutsWrite, ExpensesRead, ExpensesWrite,
         TestsRead, TestsWrite, ReportsRead, RemindersSend, UsersManage, AuditRead, BillingManage, YearsManage,
-        BrandingManage, AdmissionsManage, Workspace, FacultyPortal, ReportsActivity, AttendanceManage, StudentPortal
+        BrandingManage, AdmissionsManage, Workspace, FacultyPortal, ReportsActivity, AttendanceManage, StudentPortal,
+        SettingsManage
     ];
 }
 
@@ -100,7 +103,7 @@ public static class RolePermissions
         [Roles.SuperAdmin] = Permissions.All.Except([Permissions.FacultyPortal, Permissions.StudentPortal]).ToFrozenSet(),
         [Roles.Admin] = Permissions.All.Except(
         [
-            Permissions.BillingManage, Permissions.YearsManage, Permissions.BrandingManage, Permissions.ReportsActivity,
+            Permissions.BillingManage, Permissions.YearsManage, Permissions.BrandingManage, Permissions.ReportsActivity, Permissions.SettingsManage,
             Permissions.FacultyPortal, Permissions.StudentPortal
         ]).ToFrozenSet(),
         [Roles.Accountant] = new[]

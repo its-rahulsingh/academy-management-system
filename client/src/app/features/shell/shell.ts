@@ -37,6 +37,7 @@ const BILLING_NAV: NavItem = { label: 'Subscription', icon: '◈', link: '/app/b
 
 const PLATFORM_NAV: NavItem[] = [
   { label: 'Overview', icon: '▦', link: '/platform', exact: true },
+  { label: 'Analytics', icon: '◔', link: '/platform/analytics' },
   { label: 'Academies', icon: '⌂', link: '/platform/academies' },
   { label: 'Plans', icon: '▤', link: '/platform/plans' },
   { label: 'Invoices', icon: '▣', link: '/platform/invoices' },

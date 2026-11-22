@@ -33,6 +33,8 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         e.Property(x => x.Code).HasMaxLength(40);
         e.Property(x => x.Name).HasMaxLength(Columns.Name);
         e.Property(x => x.Status).IsEnumText();
+        e.Property(x => x.ExpenseProofRequiredAbove).HasPrecision(Columns.Money, 2);
+        e.Property(x => x.LargeAmountAlert).IsMoney();
         e.Property(x => x.ContactName).HasMaxLength(Columns.Name);
         e.Property(x => x.ContactEmail).HasMaxLength(Columns.Email);
         e.Property(x => x.ContactPhone).HasMaxLength(Columns.Phone);
@@ -163,6 +165,69 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         e.Property(x => x.EntityId).HasMaxLength(80);
         e.Property(x => x.Changes).HasColumnType("jsonb");
         e.Property(x => x.IpAddress).HasMaxLength(45);
+    }
+}
+
+internal sealed class AuditFlagReviewConfiguration : IEntityTypeConfiguration<AuditFlagReview>
+{
+    public void Configure(EntityTypeBuilder<AuditFlagReview> e)
+    {
+        e.ToTable("audit_flag_reviews");
+        e.HasKey(x => new { x.TenantId, x.Key });
+        e.Property(x => x.Key).HasMaxLength(160);
+        e.Property(x => x.ReviewedByName).HasMaxLength(140);
+    }
+}
+
+internal sealed class UsageHourConfiguration : IEntityTypeConfiguration<Infrastructure.Usage.UsageHour>
+{
+    public void Configure(EntityTypeBuilder<Infrastructure.Usage.UsageHour> e)
+    {
+        e.ToTable("usage_hours");
+        e.HasKey(x => new { x.HourUtc, x.TenantId, x.Feature, x.Role, x.Device });
+        e.HasIndex(x => new { x.TenantId, x.HourUtc });
+        e.Property(x => x.Feature).HasMaxLength(60);
+        e.Property(x => x.Role).HasMaxLength(20);
+        e.Property(x => x.Device).HasMaxLength(10);
+    }
+}
+
+internal sealed class UsageUserHourConfiguration : IEntityTypeConfiguration<Infrastructure.Usage.UsageUserHour>
+{
+    public void Configure(EntityTypeBuilder<Infrastructure.Usage.UsageUserHour> e)
+    {
+        e.ToTable("usage_user_hours");
+        e.HasKey(x => new { x.HourUtc, x.UserId });
+        e.HasIndex(x => new { x.TenantId, x.HourUtc });
+    }
+}
+
+internal sealed class UsagePeakHourConfiguration : IEntityTypeConfiguration<Infrastructure.Usage.UsagePeakHour>
+{
+    public void Configure(EntityTypeBuilder<Infrastructure.Usage.UsagePeakHour> e)
+    {
+        e.ToTable("usage_peak_hours");
+        e.HasKey(x => x.HourUtc);
+    }
+}
+
+internal sealed class DatabaseSizeDayConfiguration : IEntityTypeConfiguration<Infrastructure.Usage.DatabaseSizeDay>
+{
+    public void Configure(EntityTypeBuilder<Infrastructure.Usage.DatabaseSizeDay> e)
+    {
+        e.ToTable("database_size_days");
+        e.HasKey(x => x.Date);
+    }
+}
+
+internal sealed class PlatformSettingConfiguration : IEntityTypeConfiguration<PlatformSetting>
+{
+    public void Configure(EntityTypeBuilder<PlatformSetting> e)
+    {
+        e.ToTable("platform_settings");
+        e.HasKey(x => x.Key);
+        e.Property(x => x.Key).HasMaxLength(60);
+        e.Property(x => x.Value).HasMaxLength(400);
     }
 }
 

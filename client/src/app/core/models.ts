@@ -69,6 +69,8 @@ export const Permission = {
   /** Show the check-in QR code, see classes running now and stop one. */
   AttendanceManage: 'attendance.manage',
   StudentPortal: 'student.portal',
+  /** Academy-wide rules: when an expense needs a bill, and the amount that raises a red flag (Super Admin). */
+  SettingsManage: 'settings.manage',
 } as const;
 
 // ---- Branding and admissions ----
@@ -483,9 +485,24 @@ export interface Expense {
   notes: string;
   status: LedgerStatus;
   voidReason: string | null;
+  /** Bills and receipts attached. */
+  proofCount: number;
+}
+
+export interface ExpenseProofFile {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAtUtc: string;
+  addedBy: string;
 }
 
 export interface ExpenseSummary {
+  /** Expenses above this need a bill attached; null means proof is optional. */
+  proofRequiredAbove: number | null;
+  maxProofs: number;
+  maxProofMb: number;
   total: number;
   thisMonth: number;
   count: number;
@@ -794,4 +811,47 @@ export interface EmailStatus {
   sent: number;
   failed: number;
   recentProblems: { toAddress: string; subject: string; category: string; status: string; attempts: number; lastError: string; createdAtUtc: string }[];
+}
+
+// ---- Activity dashboard ----
+
+export type FlagSeverity = 'red' | 'orange' | 'yellow';
+
+export interface ActivityFlag {
+  key: string;
+  severity: FlagSeverity;
+  title: string;
+  detail: string;
+  userName: string;
+  atUtc: string;
+  entityType: string | null;
+  entityId: string | null;
+  reviewed: boolean;
+  reviewedBy: string | null;
+  reviewedAtUtc: string | null;
+}
+
+export interface ActivityDashboard {
+  from: string;
+  to: string;
+  groupBy: 'Day' | 'Week' | 'Month';
+  truncated: boolean;
+  largeAmountAlert: number;
+  cards: {
+    actions: number;
+    previousActions: number;
+    activeUsers: number;
+    moneyEdits: number;
+    removals: number;
+    afterHours: number;
+    signIns: number;
+    failedSignIns: number;
+  };
+  timeline: { label: string; from: string; to: string; created: number; changed: number; removed: number; total: number }[];
+  /** Seven rows, Monday first, of 24 hourly counts in academy time. */
+  heatmap: number[][];
+  byUser: { name: string; role: string | null; created: number; changed: number; removed: number; afterHours: number; total: number }[];
+  byArea: { entityType: string; count: number }[];
+  flagCounts: { red: number; orange: number; yellow: number; reviewed: number };
+  flags: ActivityFlag[];
 }

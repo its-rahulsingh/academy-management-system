@@ -44,12 +44,21 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     public DbSet<FacultyClock> FacultyClocks => Set<FacultyClock>();
     public DbSet<AdmissionApplication> AdmissionApplications => Set<AdmissionApplication>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ExpenseProof> ExpenseProofs => Set<ExpenseProof>();
     public DbSet<AcademyTest> Tests => Set<AcademyTest>();
     public DbSet<TestResult> TestResults => Set<TestResult>();
     public DbSet<TenantCounter> TenantCounters => Set<TenantCounter>();
 
     // Operations
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AuditFlagReview> AuditFlagReviews => Set<AuditFlagReview>();
+
+    // Owner analytics: hourly usage counts (no personal data) and owner settings
+    public DbSet<Infrastructure.Usage.UsageHour> UsageHours => Set<Infrastructure.Usage.UsageHour>();
+    public DbSet<Infrastructure.Usage.UsageUserHour> UsageUserHours => Set<Infrastructure.Usage.UsageUserHour>();
+    public DbSet<Infrastructure.Usage.UsagePeakHour> UsagePeakHours => Set<Infrastructure.Usage.UsagePeakHour>();
+    public DbSet<PlatformSetting> PlatformSettings => Set<PlatformSetting>();
+    public DbSet<Infrastructure.Usage.DatabaseSizeDay> DatabaseSizeDays => Set<Infrastructure.Usage.DatabaseSizeDay>();
     public DbSet<EmailMessage> EmailMessages => Set<EmailMessage>();
     public DbSet<Batch> Batches => Set<Batch>();
 
@@ -139,13 +148,16 @@ public sealed partial class AcademyDbContext(DbContextOptions<AcademyDbContext> 
     }
 
     private static readonly HashSet<Type> NotAudited =
-        [typeof(AuditLog), typeof(EmailMessage), typeof(PasswordResetToken), typeof(TenantCounter), typeof(Batch), typeof(TenantLogo)];
+        [typeof(AuditLog), typeof(EmailMessage), typeof(PasswordResetToken), typeof(TenantCounter), typeof(Batch), typeof(TenantLogo), typeof(AuditFlagReview),
+        typeof(Infrastructure.Usage.UsageHour), typeof(Infrastructure.Usage.UsageUserHour), typeof(Infrastructure.Usage.UsagePeakHour), typeof(Infrastructure.Usage.DatabaseSizeDay)];
 
     /// <summary>Bookkeeping columns whose changes are noise in an audit trail.</summary>
     private static readonly HashSet<string> SkippedProperties =
     [
         nameof(AppUser.SecurityStamp), nameof(AppUser.FailedLoginCount), nameof(AppUser.LockoutEndUtc),
-        nameof(AppUser.LastLoginAtUtc), nameof(Subscription.UpdatedAtUtc), nameof(Tenant.CheckInSecret)
+        nameof(AppUser.LastLoginAtUtc), nameof(Subscription.UpdatedAtUtc), nameof(Tenant.CheckInSecret),
+        // A file's bytes: the log keeps its name, type and size instead.
+        nameof(ExpenseProof.Data)
     ];
 
     private void AddAuditEntries()

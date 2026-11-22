@@ -355,8 +355,9 @@ public static class AttendanceEndpoints
 
     private static string FormatDistance(double meters) => meters >= 1000 ? $"{meters / 1000:0.0} km" : $"{meters:0} m";
 
-    private static async Task<IResult> ClockIn(ClockInRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    private static async Task<IResult> ClockIn(ClockInRequest request, AcademyDbContext db, ICurrentUser currentUser, HttpContext http, CancellationToken ct)
     {
+        Infrastructure.Usage.UsageTracker.Tag(http, request.Method == ClockMethod.Qr ? "QR clock-in" : request.Method == ClockMethod.Location ? "Location clock-in" : "Faculty portal");
         if (await CurrentFacultyAsync(db, currentUser, ct) is not { } faculty) return NotLinked();
         if (!faculty.Active) return ApiResults.Bad("Your faculty record is marked as not teaching. Ask the academy to update it.");
         if (faculty.PayType == FacultyPayType.Hourly && faculty.HourlyRate <= 0) return ApiResults.Bad("The academy has not set your hourly rate yet.");
@@ -391,8 +392,9 @@ public static class AttendanceEndpoints
         }, ct);
     }
 
-    private static async Task<IResult> ClockOut(ClockOutRequest request, AcademyDbContext db, ICurrentUser currentUser, CancellationToken ct)
+    private static async Task<IResult> ClockOut(ClockOutRequest request, AcademyDbContext db, ICurrentUser currentUser, HttpContext http, CancellationToken ct)
     {
+        Infrastructure.Usage.UsageTracker.Tag(http, request.Method == ClockMethod.Qr ? "QR clock-in" : request.Method == ClockMethod.Location ? "Location clock-in" : "Faculty portal");
         if (await CurrentFacultyAsync(db, currentUser, ct) is not { } faculty) return NotLinked();
         var (proof, error) = await CheckProofAsync(db, currentUser.TenantId!.Value, request.Method, request.Code, request.Latitude, request.Longitude, request.Accuracy, ct);
         if (error is not null) return error;

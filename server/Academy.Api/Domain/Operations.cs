@@ -18,6 +18,25 @@ public sealed class AuditLog
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>An activity-dashboard flag the Super Admin looked at and marked as fine. Flags are worked out from the log; this only remembers the decision.</summary>
+public sealed class AuditFlagReview : ITenantOwned
+{
+    public Guid TenantId { get; set; }
+    /// <summary>Identifies the flag, e.g. "a:1234" for one log row or "night:{user}:{date}" for a group.</summary>
+    public string Key { get; set; } = "";
+    public Guid? ReviewedByUserId { get; set; }
+    public string ReviewedByName { get; set; } = "";
+    public DateTime ReviewedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>An owner-console setting, such as the monthly hosting cost used to work out each academy's share of it.</summary>
+public sealed class PlatformSetting
+{
+    public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
 public enum EmailStatus
 {
     Pending,

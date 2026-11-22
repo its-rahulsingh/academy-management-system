@@ -44,6 +44,11 @@ public sealed class Tenant : Entity
     /// </summary>
     public bool AutoApprovePackageClasses { get; set; } = true;
 
+    /// <summary>An expense above this amount cannot be saved without a bill attached. Null: proof is never required.</summary>
+    public decimal? ExpenseProofRequiredAbove { get; set; }
+    /// <summary>Discounts and write-offs at or above this amount are red flags on the activity dashboard.</summary>
+    public decimal LargeAmountAlert { get; set; } = 5000;
+
     /// <summary>The name the academy's emails show as their sender. Empty uses the academy name.</summary>
     public string EmailSenderName { get; set; } = "";
     /// <summary>Where replies to the academy's emails go, usually its office inbox. Empty means no reply address.</summary>

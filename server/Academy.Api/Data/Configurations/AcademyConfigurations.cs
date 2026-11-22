@@ -247,6 +247,19 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
     }
 }
 
+internal sealed class ExpenseProofConfiguration : IEntityTypeConfiguration<ExpenseProof>
+{
+    public void Configure(EntityTypeBuilder<ExpenseProof> e)
+    {
+        e.ToTable("expense_proofs", t => t.HasCheckConstraint("ck_expense_proofs_size", $"octet_length(data) <= {ExpenseProof.MaxBytes}"));
+        e.HasCreatedAt();
+        e.HasIndex(x => new { x.TenantId, x.ExpenseId });
+        e.Property(x => x.FileName).HasMaxLength(200);
+        e.Property(x => x.ContentType).HasMaxLength(40);
+        e.HasOne(x => x.Expense).WithMany().HasForeignKey(x => x.ExpenseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class AcademyTestConfiguration : IEntityTypeConfiguration<AcademyTest>
 {
     public void Configure(EntityTypeBuilder<AcademyTest> e)

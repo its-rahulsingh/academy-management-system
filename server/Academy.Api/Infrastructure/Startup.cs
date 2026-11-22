@@ -38,6 +38,7 @@ public static class Startup
         services.AddScoped<BillingService>();
         services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
         services.AddSingleton<SessionService>();
+        services.AddSingleton<Usage.UsageTracker>();
 
         services.Configure<SubscriptionOptions>(configuration.GetSection(SubscriptionOptions.Section));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.Section));
@@ -62,6 +63,7 @@ public static class Startup
             services.AddHostedService<EmailDispatchService>();
             services.AddHostedService<BillingCycleService>();
             services.AddHostedService<ClassWatchService>();
+            services.AddHostedService<Usage.UsageFlushService>();
         }
 
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -135,6 +137,8 @@ public static class Startup
         app.UseRouting();
         app.UseRateLimiter();
         app.UseAuthentication();
+        // After sign-in is known (role, academy) and around everything else, so refusals and errors are counted too.
+        app.UseMiddleware<Usage.UsageMiddleware>();
         app.UseAuthorization();
         app.UseMiddleware<CsrfMiddleware>();
     }
@@ -146,6 +150,7 @@ public static class Startup
 
         app.MapAuthEndpoints();
         app.MapPlatformEndpoints();
+        app.MapPlatformAnalyticsEndpoints();
         app.MapPlatformBrandingEndpoints();
         app.MapEmailAdminEndpoints();
         app.MapBillingEndpoints();
@@ -174,6 +179,7 @@ public static class Startup
         academy.MapReportEndpoints();
         academy.MapUserEndpoints();
         academy.MapAuditEndpoints();
+        academy.MapAuditDashboardEndpoints();
 
         // Single-page app: any other GET returns index.html so the browser router can handle the path.
         app.MapFallback(async context =>

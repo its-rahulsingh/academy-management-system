@@ -1,5 +1,6 @@
 import { Component, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { RecordHistoryComponent } from '../../shared/record-history';
 import { AcademicYearService } from '../../core/academic-year.service';
 import { Api, FormState, Notify, PagedList, errorMessage } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
@@ -15,7 +16,7 @@ interface VoidTarget {
 
 @Component({
   selector: 'app-students',
-  imports: [RouterLink, UI, PaymentDialogComponent],
+  imports: [RouterLink, UI, PaymentDialogComponent, RecordHistoryComponent],
   template: `
     <div class="page-header">
       <div>
@@ -202,6 +203,9 @@ interface VoidTarget {
           @if (can(permission.StudentsWrite)) {
             <button type="button" class="secondary" (click)="openForm(d.student)">Edit details</button>
           }
+          @if (can(permission.AuditRead)) {
+            <button type="button" class="secondary" (click)="historyId.set(d.student.id)">History</button>
+          }
           @if (can(permission.UsersManage) && !d.login) {
             <button type="button" class="secondary" (click)="openLogin(d.student)">Give portal login</button>
           }
@@ -289,6 +293,10 @@ interface VoidTarget {
         (confirmed)="confirmVoid(target, $event)"
       />
     }
+
+    @if (historyId(); as id) {
+      <app-record-history entityType="Student" [entityId]="id" (closed)="historyId.set(null)" />
+    }
   `,
 })
 export class StudentsComponent {
@@ -317,6 +325,8 @@ export class StudentsComponent {
   protected model = this.blank();
 
   protected readonly detail = signal<StudentDetail | null>(null);
+  /** The student whose change history is open. */
+  protected readonly historyId = signal<string | null>(null);
   protected readonly login = new FormState();
   protected readonly settle = new FormState();
   protected readonly methods = PAYMENT_METHODS;

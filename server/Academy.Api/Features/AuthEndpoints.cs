@@ -106,6 +106,17 @@ public static class AuthEndpoints
                 user.LockoutEndUtc = DateTime.UtcNow.Add(SessionService.LockoutTime);
                 user.FailedLoginCount = 0;
             }
+            // Kept for the activity dashboard, which flags repeated failures (someone guessing a password).
+            db.AuditLogs.Add(new AuditLog
+            {
+                TenantId = user.TenantId,
+                UserId = user.Id,
+                UserName = user.DisplayName,
+                Action = "LoginFailed",
+                EntityType = nameof(AppUser),
+                EntityId = user.Id.ToString(),
+                IpAddress = http.Connection.RemoteIpAddress?.ToString()
+            });
             await db.SaveChangesAsync(ct);
             return ApiResults.Error(StatusCodes.Status401Unauthorized, invalid);
         }

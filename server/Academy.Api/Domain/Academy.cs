@@ -314,6 +314,23 @@ public sealed class Expense : LedgerEntry
     public string Notes { get; set; } = "";
 }
 
+/// <summary>
+/// A bill, invoice or payment screenshot backing an expense: an image or a PDF, kept in the database because the
+/// server's own disk does not survive a restart. Proof stays when the expense is voided, so the record is complete.
+/// </summary>
+public sealed class ExpenseProof : TenantEntity
+{
+    public const int MaxBytes = 5 * 1024 * 1024;
+    public const int MaxPerExpense = 5;
+
+    public Guid ExpenseId { get; set; }
+    public Expense Expense { get; set; } = null!;
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    public int SizeBytes { get; set; }
+    public byte[] Data { get; set; } = [];
+}
+
 public sealed class AcademyTest : TenantEntity
 {
     public string Title { get; set; } = "";
