@@ -4,7 +4,7 @@ Multi-tenant finance management for academies, sold on subscription.
 
 - **You (platform owner)** create academies, choose their plan, and issue each one a Super Admin login.
 - **Each academy** signs in with its own academy code, manages its own staff logins, and sees only its own data.
-- **Access follows the subscription**: trial, renewal invoices, grace period, lock-out when unpaid.
+- **Free, Basic and Pro plans**: new academies start on the Free plan (25 students, 2 faculty, 1 login, 50 emailed receipts a month) with no trial and upgrade when they need more. The owner edits limits and creates plans on the Plans page. A paid plan that is not renewed falls back to Free instead of locking the academy out; limits never delete anything.
 
 Stack: Angular 21 · ASP.NET Core 10 · PostgreSQL · one Docker container (Render).
 

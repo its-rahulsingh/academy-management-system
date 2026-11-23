@@ -85,12 +85,16 @@ export interface Branding {
   emailSenderName: string;
   /** Where replies to the academy's emails go. */
   replyToEmail: string;
+  /** False on plans without custom branding: the logo is not shown and cannot be uploaded. */
+  customBranding: boolean;
 }
 
 export interface PublicAcademy {
   name: string;
   tagline: string;
   logoUrl: string | null;
+  /** Present on the admission form: false keeps the "Powered by Ojas" credit. */
+  customBranding?: boolean;
 }
 
 export interface AdmissionForm {
@@ -702,12 +706,31 @@ export interface Invoice {
   notes?: string;
 }
 
+/** A plan as an academy sees it on its Subscription page. */
+export interface PlanOffer {
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  interval: BillingInterval;
+  maxStudents: number | null;
+  maxUsers: number | null;
+  maxFaculty: number | null;
+  maxReceiptEmailsPerMonth: number | null;
+  customBranding: boolean;
+}
+
 export interface BillingOverview {
   subscription: {
     planName: string;
+    planCode: string;
     description: string;
     maxStudents: number | null;
     maxUsers: number | null;
+    maxFaculty: number | null;
+    maxReceiptEmailsPerMonth: number | null;
+    customBranding: boolean;
     status: SubscriptionStatus;
     price: number;
     currency: string;
@@ -716,7 +739,8 @@ export interface BillingOverview {
     currentPeriodEnd: string;
   } | null;
   invoices: Invoice[];
-  usage: { students: number; users: number };
+  plans: PlanOffer[];
+  usage: { students: number; users: number; faculty: number; receiptEmails: number };
   onlinePayment: { enabled: boolean; provider: string; keyId: string | null };
 }
 
@@ -740,6 +764,9 @@ export interface Plan {
   interval: BillingInterval;
   maxStudents: number | null;
   maxUsers: number | null;
+  maxFaculty: number | null;
+  maxReceiptEmailsPerMonth: number | null;
+  customBranding: boolean;
   isActive: boolean;
   subscribers: number;
 }

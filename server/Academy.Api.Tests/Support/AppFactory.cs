@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Academy.Api.Data;
@@ -76,7 +76,7 @@ public sealed class AppFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public async Task<TestAcademy> NewAcademyAsync(int trialDays = 14)
     {
         var owner = await OwnerAsync();
-        var plans = await owner.GetJsonAsync("/api/platform/plans");
+        var planId = await TestPlanIdAsync(owner);
         var code = $"t{Guid.NewGuid():N}"[..16];
         var adminEmail = $"admin@{code}.test";
 
@@ -84,7 +84,7 @@ public sealed class AppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             name = $"Academy {code}",
             code,
-            planId = plans.AsArray().Single(p => p!["code"]!.GetValue<string>() == "starter")!["id"]!.GetValue<Guid>(),
+            planId,
             trialDays,
             superAdmin = new { name = "Super Admin", email = adminEmail, password = Password }
         });
@@ -94,6 +94,21 @@ public sealed class AppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var admin = NewBrowser();
         await admin.LoginAsync(code, adminEmail);
         return new TestAcademy(this, id, code, admin, owner);
+    }
+
+    /// <summary>
+    /// A paid plan with no limits, so tests are not shaped by the real price list. Created once; parallel tests
+    /// that race to create it both end up with the same plan.
+    /// </summary>
+    public async Task<Guid> TestPlanIdAsync(HttpClient owner)
+    {
+        const string code = "test-unlimited";
+        Guid? Find(System.Text.Json.Nodes.JsonNode plans) =>
+            plans.AsArray().FirstOrDefault(p => p!["code"]!.GetValue<string>() == code)?["id"]!.GetValue<Guid>();
+
+        if (Find(await owner.GetJsonAsync("/api/platform/plans")) is { } existing) return existing;
+        await owner.PostAsJsonAsync("/api/platform/plans", new { code, name = "Test unlimited", price = 999, interval = "Monthly" });
+        return Find(await owner.GetJsonAsync("/api/platform/plans"))!.Value;
     }
 }
 

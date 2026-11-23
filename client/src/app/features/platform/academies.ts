@@ -80,7 +80,10 @@ import { UI } from '../../shared/ui';
           </div>
           <div><label for="trial">Free trial (days)</label><input id="trial" type="number" min="0" max="365" [(ngModel)]="model.trialDays" /></div>
         </div>
-        <div class="helper">The first invoice is raised a few days before the trial ends. Use 0 to bill straight away.</div>
+        <div class="helper">
+          Academies normally start on Free with no trial. If you put an academy on a paid plan, a trial gives it that plan free
+          for those days and it moves to Free if it has not paid by then; with 0 days the first invoice is raised straight away.
+        </div>
         <label for="phone">Contact phone</label>
         <input id="phone" [(ngModel)]="model.contactPhone" maxlength="32" />
 
@@ -132,7 +135,9 @@ export class AcademiesComponent {
   }
 
   private blank() {
-    return { name: '', code: '', planId: '', trialDays: 14, contactPhone: '', superAdmin: { name: '', email: '', password: '' } };
+    // New academies start on the Free plan with no trial; they upgrade when they need more.
+    const free = this.plans().find(p => p.code === 'free');
+    return { name: '', code: '', planId: free?.id ?? '', trialDays: 0, contactPhone: '', superAdmin: { name: '', email: '', password: '' } };
   }
 
   protected open(): void {

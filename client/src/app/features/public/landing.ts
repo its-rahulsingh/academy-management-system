@@ -1,15 +1,10 @@
 import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { CONTACT, whatsappLink } from '../../core/contact';
 
-/** How academies reach us. "Start free" buttons open WhatsApp with a ready-made message. */
-const CONTACT = {
-  phone: '+91 85548 23947',
-  tel: 'tel:+918554823947',
-  email: 'rsingh17032000@gmail.com',
-  whatsapp: 'https://wa.me/918554823947?text=' + encodeURIComponent('Hi, I would like to try Ojas for my academy (6 months free).'),
-};
-const CONTACT_URL = CONTACT.whatsapp;
+/** "Start free" buttons open WhatsApp with a ready-made message. */
+const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my academy.');
 
 /**
  * Public marketing page. Everything visual is drawn in code (a particle orb on a canvas, CSS 3D product mock-ups)
@@ -33,7 +28,7 @@ const CONTACT_URL = CONTACT.whatsapp;
         </nav>
         <div class="nav-cta">
           <a class="ghost" routerLink="/login">Sign in</a>
-          <button class="btn glow" (click)="start()">Get 6 months free</button>
+          <button class="btn glow" (click)="start()">Start free</button>
         </div>
       </header>
 
@@ -42,14 +37,14 @@ const CONTACT_URL = CONTACT.whatsapp;
         <canvas class="orb" #orb aria-hidden="true"></canvas>
         <div class="aurora" aria-hidden="true"></div>
         <div class="hero-copy">
-          <span class="lp-pill rv"><i></i> Now onboarding academies · first 6 months free</span>
+          <span class="lp-pill rv"><i></i> Free for small classes · paid plans from ₹199</span>
           <h1 class="rv">The radiant way to <br class="br-d" /><span class="grad">run your academy.</span></h1>
           <p class="rv">
             Fees, faculty attendance, admissions, student portals and reports — one beautifully simple app,
             built for coaching institutes and academies across India.
           </p>
           <div class="hero-actions rv">
-            <button class="btn glow lg" (click)="start()">Start free for 6 months <b>→</b></button>
+            <button class="btn glow lg" (click)="start()">Start free today <b>→</b></button>
             <button class="btn glass lg" (click)="openTour()"><span class="play">▶</span> Watch the 2-min tour</button>
           </div>
           <ul class="hero-points rv">
@@ -211,7 +206,7 @@ const CONTACT_URL = CONTACT.whatsapp;
 
           <article class="tile tilt rv">
             <span class="tag">Your brand</span><h3>Looks like your academy.</h3>
-            <p>Your logo, your tagline, emails in your name.</p>
+            <p>Your logo and tagline on Basic and Pro. Emails in your name on every plan.</p>
             <div class="vis brandv"><b class="am big"></b><div><strong>Sunrise Classes</strong><small>Where toppers are made</small></div></div>
           </article>
         </div>
@@ -271,17 +266,20 @@ const CONTACT_URL = CONTACT.whatsapp;
       <!-- PRICING -->
       <section class="sec" id="pricing">
         <div class="eyebrow rv">PRICING</div>
-        <h2 class="rv">Free for 6 months. <span class="grad">Then simple.</span></h2>
-        <p class="lead rv">Every plan includes every feature. No card needed to start.</p>
+        <h2 class="rv">Start free. <span class="grad">Pay only as you grow.</span></h2>
+        <p class="lead rv">Every academy starts on Free and can stay there for as long as it likes. Upgrade only when you need more. No card needed.</p>
         <div class="prices">
-          @for (p of plans; track p[0]; let i = $index) {
+          @for (p of plans; track p.name; let i = $index) {
             <div class="price tilt rv" [class.pop]="i === 1">
               @if (i === 1) { <span class="badge">Most popular</span> }
-              <small>{{ p[0] }}</small>
-              <h3>{{ p[1] }}<span>{{ p[2] }}</span></h3>
-              <p>{{ p[3] }}</p>
-              <div class="free">First 6 months free</div>
-              <button class="btn" [class.glow]="i === 1" [class.glass]="i !== 1" (click)="start()">{{ i === 2 ? 'Talk to us' : 'Start free' }}</button>
+              <small>{{ p.name }}</small>
+              <h3>{{ p.price }}<span>{{ p.per }}</span></h3>
+              <p>{{ p.forWho }}</p>
+              @if (p.yearly) { <div class="free">{{ p.yearly }}</div> }
+              <ul class="pfeat">
+                @for (f of p.features; track f) { <li>{{ f }}</li> }
+              </ul>
+              <button class="btn" [class.glow]="i === 1" [class.glass]="i !== 1" (click)="start()">{{ i === 0 ? 'Start free' : 'Choose ' + p.name }}</button>
             </div>
           }
         </div>
@@ -306,7 +304,7 @@ const CONTACT_URL = CONTACT.whatsapp;
         <div class="final-glow" aria-hidden="true"></div>
         <img class="final-logo rv" src="ojas-logo.svg" alt="" />
         <h2 class="rv">Give your academy its <span class="grad">Ojas.</span></h2>
-        <p class="rv">Six months free. We set everything up and walk your team through it.</p>
+        <p class="rv">Free to start. We set everything up and walk you through it.</p>
         <div class="hero-actions rv">
           @if (contactUrl) {
             <a class="btn glow lg" [href]="contactUrl" target="_blank" rel="noopener">Book your free setup on WhatsApp <b>→</b></a>
@@ -316,7 +314,7 @@ const CONTACT_URL = CONTACT.whatsapp;
         <div class="contact rv">
           <a [href]="contact.tel"><span>📞</span><div><small>Call us</small><b>{{ contact.phone }}</b></div></a>
           <a [href]="'mailto:' + contact.email"><span>✉️</span><div><small>Email us</small><b>{{ contact.email }}</b></div></a>
-          <a [href]="contact.whatsapp" target="_blank" rel="noopener"><span>💬</span><div><small>WhatsApp</small><b>{{ contact.phone }}</b></div></a>
+          <a [href]="contactUrl" target="_blank" rel="noopener"><span>💬</span><div><small>WhatsApp</small><b>{{ contact.phone }}</b></div></a>
         </div>
       </section>
 
@@ -526,7 +524,9 @@ const CONTACT_URL = CONTACT.whatsapp;
     .price small { font-size: 14px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 2px; }
     .price h3 { font-size: 46px; letter-spacing: -.04em; margin: 0; } .price h3 span { font-size: 15px; color: var(--dim); font-weight: 600; letter-spacing: 0; margin-left: 4px; }
     .price p { margin: 0; color: var(--dim); font-size: 14px; flex: 1; }
-    .free { font-size: 13px; font-weight: 800; color: #6ee7b7; } .price .btn { justify-content: center; margin-top: 8px; }
+    .free { font-size: 13px; font-weight: 800; color: #6ee7b7; }
+    .pfeat { list-style: none; padding: 0; margin: 6px 0 4px; display: grid; gap: 8px; font-size: 14px; color: #d0cee8; }
+    .pfeat li::before { content: '✓'; color: #6ee7b7; font-weight: 800; margin-right: 8px; } .price .btn { justify-content: center; margin-top: 8px; }
     .includes { list-style: none; padding: 0; margin: 40px auto 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 24px; max-width: 900px; color: var(--dim); font-size: 14px; font-weight: 600; }
     .includes li::before { content: '✓'; color: #6ee7b7; margin-right: 7px; font-weight: 800; }
 
@@ -634,15 +634,20 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
     ['🔒', 'Account lockout', 'Five wrong passwords lock an account for 15 minutes. New logins must set their own password.'],
     ['📱', 'Signed QR codes', 'Check-in codes are signed and expire in a minute, so a photo of one is useless later.'],
   ];
+  /** Mirrors the Free, Basic and Pro plans created by the FreemiumPlans migration. */
   protected readonly plans = [
-    ['Starter', '₹2,499', '/month', 'For single-location academies getting organised.'],
-    ['Growth', '₹6,999', '/month', 'For growing academies that need complete visibility.'],
-    ['Enterprise', 'Custom', '', 'For larger academy networks with special needs.'],
+    { name: 'Free', price: '₹0', per: '/forever', forWho: 'For small classes run by one teacher.', yearly: '',
+      features: ['25 students', '2 faculty', '1 login (you)', '50 emailed receipts a month', '"Powered by Ojas" on forms'] },
+    { name: 'Basic', price: '₹199', per: '/month', forWho: 'For growing classes.', yearly: 'or ₹1,999 a year — 2 months free',
+      features: ['75 students', '5 faculty', '2 staff logins', 'Unlimited emailed receipts', 'Your own logo'] },
+    { name: 'Pro', price: '₹499', per: '/month', forWho: 'For established academies.', yearly: 'or ₹4,999 a year — 2 months free',
+      features: ['250 students', '15 faculty', '5 staff logins', 'Unlimited emailed receipts', 'Your own logo'] },
   ];
-  protected readonly includes = ['Fees & receipts', 'Faculty attendance & pay', 'Online admissions', 'Student & teacher portals', 'Tests & report cards', 'Expenses with bills', 'Excel reports', 'Activity alerts', 'Your logo & emails'];
+  protected readonly includes = ['Fees & receipts', 'Faculty attendance & pay', 'Online admissions', 'Student & teacher portals', 'Tests & report cards', 'Expenses with bills', 'Excel reports', 'Activity alerts', 'Emails in your academy’s name'];
   protected readonly faqs = [
     ['Do I need to install anything?', 'No. Ojas runs in the browser on any phone, tablet or computer. Teachers and students simply sign in with your academy code.'],
-    ['What happens after the 6 free months?', 'You choose a plan and pay monthly. No card is needed to start, and you will know your billing date from day one.'],
+    ['Is it really free?', 'Yes. The Free plan has no time limit: up to 25 students, 2 faculty and 50 emailed receipts a month. It never runs out; you upgrade only if you need more.'],
+    ['What happens if I go over a limit?', 'Nothing is deleted. You keep everything you already have and simply cannot add more until you upgrade — from ₹199 a month, or ₹1,999 a year.'],
     ['Can you bring in our existing data?', 'Yes. Share your student and fee lists in Excel and we will help you load them, so you start with your real numbers.'],
     ['Is our data private?', 'Every academy has its own workspace and only sees its own records. Inside your academy, each role sees only what it needs.'],
     ['Can teachers fake attendance?', 'Not easily. QR codes change every 20 seconds and expire within a minute. Location check-ins and manual entries wait for your approval.'],

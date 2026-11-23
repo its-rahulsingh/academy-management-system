@@ -27,4 +27,4 @@ services:
       - key: Email__FromName
         value: Ojas
       - key: Subscription__DefaultTrialDays
-        value: "180" # New academies get 6 months free, matching the marketing.
+        value: "0" # New academies start on the Free plan with no trial. The owner can still give a trial when creating one.

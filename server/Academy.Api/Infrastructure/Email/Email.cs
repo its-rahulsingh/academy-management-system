@@ -1,4 +1,4 @@
-using Academy.Api.Data;
+﻿using Academy.Api.Data;
 using Academy.Api.Domain;
 using MailKit;
 using MailKit.Net.Smtp;
@@ -21,6 +21,11 @@ public sealed class EmailOptions
     public string Password { get; set; } = "";
     public string FromAddress { get; set; } = "";
     public string FromName { get; set; } = "Ojas";
+    /// <summary>Where replies to Ojas's own mail (invoices, plan changes) go. Academies' mail uses the academy's own reply-to.</summary>
+    public string ReplyTo { get; set; } = "info.ojasedu@gmail.com";
+
+    /// <summary>Mail from Ojas to an academy rather than from the academy: sent under the Ojas name, replies to Ojas.</summary>
+    public static bool IsPlatformMail(string category) => category == "Invoice";
     /// <summary>
     /// Brevo's API key. When set, mail goes through Brevo's web API over HTTPS instead of SMTP, which also works on hosts
     /// that block outgoing mail ports (such as Render's free plan). Host/Username/Password are then not needed.
@@ -58,6 +63,13 @@ public sealed record EmailSender(string FromName, string? ReplyTo)
             Clean(string.IsNullOrWhiteSpace(t.EmailSenderName) ? t.Name : t.EmailSenderName),
             string.IsNullOrWhiteSpace(t.ReplyToEmail) ? null : t.ReplyToEmail));
     }
+
+    /// <summary>
+    /// An academy's own mail carries the academy's name and reply-to. Ojas's mail (invoices and plan changes sent to an
+    /// academy, or mail with no academy) carries the Ojas name and Ojas's reply-to.
+    /// </summary>
+    public static EmailSender Choose(Guid? tenantId, string category, IReadOnlyDictionary<Guid, EmailSender> academies, EmailSender platform) =>
+        tenantId is { } id && !EmailOptions.IsPlatformMail(category) && academies.TryGetValue(id, out var academy) ? academy : platform;
 
     /// <summary>Display names go into a mail header: no line breaks, no quotes, kept short.</summary>
     public static string Clean(string name)
@@ -235,6 +247,9 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
     {
         var db = services.GetRequiredService<AcademyDbContext>();
         var transport = services.GetRequiredService<IEmailTransport>();
+        var options = services.GetRequiredService<IOptions<EmailOptions>>().Value;
+        var platform = new EmailSender(EmailSender.Clean(options.FromName),
+            string.IsNullOrWhiteSpace(options.ReplyTo) ? null : options.ReplyTo.Trim());
 
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
@@ -255,7 +270,7 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
             foreach (var message in batch)
             {
                 message.Attempts++;
-                var sender = message.TenantId is { } tenantId && senders.TryGetValue(tenantId, out var s) ? s : null;
+                var sender = EmailSender.Choose(message.TenantId, message.Category, senders, platform);
                 if (!transport.IsConfigured)
                 {
                     // Write it to the log so a developer can still read reset links, but never report it as sent.
@@ -351,6 +366,18 @@ public static class EmailTemplates
     public static (string Subject, string Body) InvoiceIssued(string academy, string number, string amount, DateOnly dueOn, DateOnly from, DateOnly to) => (
         $"Ojas invoice {number} for {academy}",
         $"Hello,\n\nInvoice {number} for {amount} has been raised for {academy}.\nPeriod: {from:dd MMM yyyy} to {to:dd MMM yyyy}\nDue on: {dueOn:dd MMM yyyy}\n\nSign in and open Subscription to pay it.\n");
+
+    public static (string Subject, string Body) MovedToFree(string academy, string why, Plan free)
+    {
+        static string Limit(int? n, string what) => n is { } v ? $"{v} {what}" : $"unlimited {what}";
+        return (
+            $"{academy} is now on the Ojas Free plan",
+            $"Hello,\n\n{why}, so {academy} has moved to the Free plan. Nothing has been deleted and you can keep using Ojas.\n\n"
+            + $"The Free plan includes {Limit(free.MaxStudents, "active students")}, {Limit(free.MaxFaculty, "faculty")}, "
+            + $"{Limit(free.MaxUsers, "staff logins")} and {Limit(free.MaxReceiptEmailsPerMonth, "emailed receipts a month")}.\n"
+            + "If you already have more than that, everything stays; you just cannot add more until you upgrade.\n\n"
+            + "To upgrade, sign in and open Subscription, or reply to this email.\n");
+    }
 
     public static (string Subject, string Body) InvoicePaid(string academy, string number, string amount, DateOnly paidThrough) => (
         $"Payment received for invoice {number}",

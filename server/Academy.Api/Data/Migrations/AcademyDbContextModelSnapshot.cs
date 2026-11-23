@@ -1354,6 +1354,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnName("currency")
                         .IsFixedLength();
 
+                    b.Property<bool>("CustomBranding")
+                        .HasColumnType("boolean")
+                        .HasColumnName("custom_branding");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -1369,6 +1373,14 @@ namespace Academy.Api.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<int?>("MaxFaculty")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_faculty");
+
+                    b.Property<int?>("MaxReceiptEmailsPerMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_receipt_emails_per_month");
 
                     b.Property<int?>("MaxStudents")
                         .HasColumnType("integer")

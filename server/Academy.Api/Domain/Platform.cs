@@ -100,7 +100,19 @@ public sealed class Plan : Entity
     public int? MaxStudents { get; set; }
     /// <summary>Null means unlimited.</summary>
     public int? MaxUsers { get; set; }
+    /// <summary>Active faculty members. Null means unlimited.</summary>
+    public int? MaxFaculty { get; set; }
+    /// <summary>Fee receipts emailed to students per calendar month. Null means unlimited.</summary>
+    public int? MaxReceiptEmailsPerMonth { get; set; }
+    /// <summary>The academy's own logo is shown and the "Powered by Ojas" credit is hidden.</summary>
+    public bool CustomBranding { get; set; } = true;
     public bool IsActive { get; set; } = true;
+}
+
+/// <summary>Plan codes the product relies on: academies fall back to the free plan when a trial or paid period ends.</summary>
+public static class PlanCodes
+{
+    public const string Free = "free";
 }
 
 public enum SubscriptionStatus

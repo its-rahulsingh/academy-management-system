@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
@@ -19,7 +19,8 @@ public static partial class PlatformEndpoints
 {
     public sealed record PlanRequest(
         string? Code, string? Name, string? Description, decimal Price, BillingInterval Interval,
-        int? MaxStudents, int? MaxUsers, bool IsActive = true);
+        int? MaxStudents, int? MaxUsers, bool IsActive = true,
+        int? MaxFaculty = null, int? MaxReceiptEmailsPerMonth = null, bool CustomBranding = true);
 
     public sealed record SuperAdminRequest(string? Name, string? Email, string? Password);
 
@@ -122,6 +123,7 @@ public static partial class PlatformEndpoints
             .Select(p => new
             {
                 p.Id, p.Code, p.Name, p.Description, p.Price, p.Currency, p.Interval, p.MaxStudents, p.MaxUsers, p.IsActive,
+                p.MaxFaculty, p.MaxReceiptEmailsPerMonth, p.CustomBranding,
                 Subscribers = db.Subscriptions.Count(s => s.PlanId == p.Id && s.Status != SubscriptionStatus.Cancelled)
             })
             .ToListAsync(ct));
@@ -131,7 +133,8 @@ public static partial class PlatformEndpoints
         if (!Validate.Name(request.Name)) return "Enter a plan name.";
         if (!CodePattern().IsMatch((request.Code ?? "").Trim().ToLowerInvariant())) return CodeRule;
         if (!Validate.AmountOrZero(request.Price)) return "Enter a valid price.";
-        if (request.MaxStudents is <= 0 || request.MaxUsers is <= 0) return "Limits must be positive, or blank for unlimited.";
+        if (request.MaxStudents is <= 0 || request.MaxUsers is <= 0 || request.MaxFaculty is <= 0 || request.MaxReceiptEmailsPerMonth is < 0)
+            return "Limits must be positive, or blank for unlimited.";
         return null;
     }
 
@@ -168,6 +171,9 @@ public static partial class PlatformEndpoints
         plan.Interval = request.Interval;
         plan.MaxStudents = request.MaxStudents;
         plan.MaxUsers = request.MaxUsers;
+        plan.MaxFaculty = request.MaxFaculty;
+        plan.MaxReceiptEmailsPerMonth = request.MaxReceiptEmailsPerMonth;
+        plan.CustomBranding = request.CustomBranding;
         plan.IsActive = request.IsActive;
     }
 
@@ -230,12 +236,14 @@ public static partial class PlatformEndpoints
             ContactEmail = Validate.Text(request.ContactEmail ?? admin.Email, 240).ToLowerInvariant(),
             ContactPhone = Validate.Text(request.ContactPhone, 32)
         };
-        // With no trial the period ends today, so the billing cycle raises the first invoice straight away.
+        // A free plan starts active and never expires. A paid plan with a trial is "Trialing" and falls back to Free
+        // if unpaid when the trial ends; without a trial it starts active, the first invoice is raised straight away,
+        // and the usual grace period applies before it falls back to Free.
         var subscription = new Subscription
         {
             TenantId = tenant.Id,
             PlanId = plan.Id,
-            Status = SubscriptionStatus.Trialing,
+            Status = plan.Price > 0 && trialDays > 0 ? SubscriptionStatus.Trialing : SubscriptionStatus.Active,
             Price = plan.Price,
             Currency = plan.Currency,
             Interval = plan.Interval,

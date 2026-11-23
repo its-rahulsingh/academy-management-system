@@ -31,10 +31,16 @@ import { UI, readLogo } from '../../shared/ui';
         <div>
           <label>Logo</label>
           <p class="helper">Shown beside the academy name for everyone who signs in, on the browser tab, and on the admission form. A square PNG or JPEG works best; it is resized automatically.</p>
+          @if (!b.customBranding) {
+            <div class="alert" role="status">
+              Your own logo is part of the Basic and Pro plans. On the Free plan the academy's first letter is shown instead,
+              and the admission form shows "Powered by Ojas". See Subscription to upgrade.
+            </div>
+          }
           <div class="button-row tight">
             <label class="secondary file-button">
               {{ b.logoUrl ? 'Replace logo' : 'Upload logo' }}
-              <input type="file" accept="image/png,image/jpeg,image/webp" (change)="upload($event)" [disabled]="busy()" />
+              <input type="file" accept="image/png,image/jpeg,image/webp" (change)="upload($event)" [disabled]="busy() || (!b.customBranding && endpoint() === 'branding')" />
             </label>
             @if (b.logoUrl) {
               <button type="button" class="secondary danger-text" (click)="removeLogo()" [disabled]="busy()">Remove logo</button>

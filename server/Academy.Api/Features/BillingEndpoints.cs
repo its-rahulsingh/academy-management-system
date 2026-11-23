@@ -1,8 +1,9 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Billing;
+using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,15 +28,25 @@ public static class BillingEndpoints
         app.MapPost("/api/billing/webhooks/razorpay", RazorpayWebhook).AllowAnonymous();
     }
 
-    private static async Task<IResult> Overview(AcademyDbContext db, IPaymentGateway gateway, CancellationToken ct)
+    private static async Task<IResult> Overview(
+        AcademyDbContext db, IPaymentGateway gateway, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
     {
         var subscription = await db.Subscriptions.AsNoTracking()
             .Select(s => new
             {
-                PlanName = s.Plan.Name, s.Plan.Description, s.Plan.MaxStudents, s.Plan.MaxUsers,
+                PlanName = s.Plan.Name, PlanCode = s.Plan.Code, s.Plan.Description, s.Plan.MaxStudents, s.Plan.MaxUsers,
+                s.Plan.MaxFaculty, s.Plan.MaxReceiptEmailsPerMonth, s.Plan.CustomBranding,
                 s.Status, s.Price, s.Currency, s.Interval, s.CurrentPeriodStart, s.CurrentPeriodEnd
             })
             .FirstOrDefaultAsync(ct);
+        // The price list, so the academy can see what an upgrade gives. Upgrades are arranged with the platform owner.
+        var plans = await db.Plans.AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Interval).ThenBy(p => p.Price)
+            .Select(p => new { p.Code, p.Name, p.Description, p.Price, p.Currency, p.Interval, p.MaxStudents, p.MaxUsers, p.MaxFaculty, p.MaxReceiptEmailsPerMonth, p.CustomBranding })
+            .ToListAsync(ct);
+        var tenantId = currentUser.TenantId!.Value;
+        var monthStart = PlanLimits.MonthStartUtc();
         var invoices = await db.SubscriptionInvoices.AsNoTracking()
             .OrderByDescending(i => i.CreatedAtUtc)
             .Take(36)
@@ -46,7 +57,16 @@ public static class BillingEndpoints
         {
             subscription,
             invoices,
-            usage = new { students = await db.Students.CountAsync(ct), users = await db.Users.CountAsync(u => u.Active, ct) },
+            plans,
+            // The same counts the limits are checked against.
+            usage = new
+            {
+                students = await db.Students.CountAsync(s => s.Active, ct),
+                users = await db.Users.CountAsync(u => u.Active && u.Role != Roles.Faculty && u.Role != Roles.Student, ct),
+                faculty = await db.Faculty.CountAsync(f => f.Active, ct),
+                receiptEmails = await db.EmailMessages.CountAsync(m => m.TenantId == tenantId && m.Category == PlanLimits.ReceiptCategory
+                    && m.CreatedAtUtc >= monthStart, ct)
+            },
             onlinePayment = new { enabled = gateway.IsConfigured, provider = gateway.Name, keyId = gateway.PublicKey }
         });
     }

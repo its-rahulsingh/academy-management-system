@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Academy.Api.Domain;
 using Academy.Api.Tests.Support;
@@ -17,6 +17,13 @@ public sealed class SubscriptionTests(AppFactory factory)
         var subscription = await db.Subscriptions.IgnoreQueryFilters().SingleAsync(s => s.TenantId == academy.Id);
         subscription.CurrentPeriodStart = periodEnd.AddDays(-13);
         subscription.CurrentPeriodEnd = periodEnd;
+        return await db.SaveChangesAsync();
+    });
+
+    private Task SetStatusAsync(TestAcademy academy, SubscriptionStatus status) => factory.WithDbAsync(async db =>
+    {
+        var subscription = await db.Subscriptions.IgnoreQueryFilters().SingleAsync(s => s.TenantId == academy.Id);
+        subscription.Status = status;
         return await db.SaveChangesAsync();
     });
 
@@ -105,6 +112,7 @@ public sealed class SubscriptionTests(AppFactory factory)
     public async Task Billing_cycle_raises_the_renewal_invoice_once_and_flags_lapsed_subscriptions()
     {
         var academy = await factory.NewAcademyAsync();
+        await SetStatusAsync(academy, SubscriptionStatus.Active);
         await SetPeriodEndAsync(academy, Today.AddDays(-1));
 
         await academy.Owner.PostAsJsonAsync("/api/platform/billing/run", new { });
@@ -115,6 +123,59 @@ public sealed class SubscriptionTests(AppFactory factory)
             (await db.Subscriptions.IgnoreQueryFilters().SingleAsync(s => s.TenantId == academy.Id)).Status));
         Assert.Equal(1, invoices);
         Assert.Equal(SubscriptionStatus.PastDue, status);
+    }
+
+    [Fact]
+    public async Task Ended_trial_and_unpaid_paid_plan_move_to_free_and_free_never_expires()
+    {
+        var trial = await factory.NewAcademyAsync();
+        await SetPeriodEndAsync(trial, Today.AddDays(-1));
+        var lapsed = await factory.NewAcademyAsync();
+        await SetStatusAsync(lapsed, SubscriptionStatus.PastDue);
+        await SetPeriodEndAsync(lapsed, Today.AddDays(-30));
+
+        await trial.Owner.PostAsJsonAsync("/api/platform/billing/run", new { });
+
+        foreach (var academy in new[] { trial, lapsed })
+        {
+            var (planCode, price, status, open) = await factory.WithDbAsync(async db =>
+            {
+                var s = await db.Subscriptions.IgnoreQueryFilters().Include(x => x.Plan).SingleAsync(x => x.TenantId == academy.Id);
+                var openInvoices = await db.SubscriptionInvoices.IgnoreQueryFilters().CountAsync(i => i.TenantId == academy.Id && i.Status == InvoiceStatus.Open);
+                return (s.Plan.Code, s.Price, s.Status, openInvoices);
+            });
+            Assert.Equal(PlanCodes.Free, planCode);
+            Assert.Equal(0, price);
+            Assert.Equal(SubscriptionStatus.Active, status);
+            Assert.Equal(0, open);
+        }
+
+        // Long after its period "ended", a free academy still has full access.
+        await SetPeriodEndAsync(trial, Today.AddDays(-400));
+        await RefreshAccessAsync(trial);
+        Assert.Equal(HttpStatusCode.OK, (await trial.Admin.GetAsync("/api/students")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Free_plan_limits_faculty_and_hides_the_logo()
+    {
+        var academy = await factory.NewAcademyAsync();
+        var owner = academy.Owner;
+        var freeId = (await owner.GetJsonAsync("/api/platform/plans")).AsArray()
+            .Single(p => p!["code"]!.GetValue<string>() == PlanCodes.Free)!["id"]!.GetValue<Guid>();
+        await owner.PutAsJsonAsync($"/api/platform/tenants/{academy.Id}/subscription",
+            new { planId = freeId, currentPeriodEnd = Today, status = "Active" });
+
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.Created, (await academy.Admin.PostAsJsonAsync("/api/faculty", new { fullName = $"Teacher {i}", agreedPayout = 0 })).StatusCode);
+        var third = await academy.Admin.PostAsJsonAsync("/api/faculty", new { fullName = "Teacher 3", agreedPayout = 0 });
+        var logo = await academy.Admin.PutAsJsonAsync("/api/branding/logo", new { dataUrl = "data:image/png;base64,AAAA" });
+        var branding = await academy.Admin.GetJsonAsync("/api/branding");
+
+        Assert.Equal(HttpStatusCode.BadRequest, third.StatusCode);
+        Assert.Contains("plan allows 2", await third.ErrorAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, logo.StatusCode);
+        Assert.False(branding["customBranding"]!.GetValue<bool>());
     }
 
     [Fact]

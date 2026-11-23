@@ -1,4 +1,4 @@
-using Academy.Api.Data;
+﻿using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Email;
@@ -31,8 +31,10 @@ public static class BrandingEndpoints
         group.MapGet("", (AcademyDbContext db, ICurrentUser user, CancellationToken ct) => Get(db, user.TenantId!.Value, ct));
         group.MapPut("", (BrandingRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser user, CancellationToken ct) =>
             BrandingStore.SetTaglineAsync(db, access, user.TenantId!.Value, request.Tagline, ct));
-        group.MapPut("/logo", (LogoRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser user, CancellationToken ct) =>
-            BrandingStore.SetLogoAsync(db, access, user.TenantId!.Value, request.DataUrl, ct));
+        group.MapPut("/logo", async (LogoRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser user, CancellationToken ct) =>
+            await access.GetAsync(user.TenantId!.Value, ct) is { CustomBranding: false }
+                ? ApiResults.Bad("Your own logo is part of the Basic and Pro plans. Upgrade the plan to show it.")
+                : await BrandingStore.SetLogoAsync(db, access, user.TenantId!.Value, request.DataUrl, ct));
         group.MapDelete("/logo", (AcademyDbContext db, TenantAccessService access, ICurrentUser user, CancellationToken ct) =>
             BrandingStore.RemoveLogoAsync(db, access, user.TenantId!.Value, ct));
         group.MapPut("/email", (EmailIdentityRequest request, AcademyDbContext db, ICurrentUser user, CancellationToken ct) =>
@@ -72,13 +74,18 @@ public static class BrandingEndpoints
     {
         var tenant = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
-            .Select(t => new { t.Id, t.Code, t.Name, t.Tagline, t.LogoVersion, t.EmailSenderName, t.ReplyToEmail })
+            .Select(t => new
+            {
+                t.Id, t.Code, t.Name, t.Tagline, t.LogoVersion, t.EmailSenderName, t.ReplyToEmail,
+                CustomBranding = db.Subscriptions.IgnoreQueryFilters().Where(s => s.TenantId == t.Id).Select(s => (bool?)s.Plan.CustomBranding).FirstOrDefault()
+            })
             .FirstOrDefaultAsync(ct);
         return tenant is null
             ? Results.NotFound()
             : Results.Ok(new
             {
                 tenant.Id, tenant.Code, tenant.Name, tenant.Tagline, logoUrl = LogoUrl(tenant.Id, tenant.LogoVersion),
+                customBranding = tenant.CustomBranding ?? true,
                 emailSenderName = tenant.EmailSenderName, replyToEmail = tenant.ReplyToEmail
             });
     }
@@ -88,11 +95,15 @@ public static class BrandingEndpoints
         var normalized = code.Trim().ToLowerInvariant();
         var tenant = await db.Tenants.AsNoTracking()
             .Where(t => t.Code == normalized && t.Status == TenantStatus.Active)
-            .Select(t => new { t.Id, t.Name, t.Tagline, t.LogoVersion })
+            .Select(t => new
+            {
+                t.Id, t.Name, t.Tagline, t.LogoVersion,
+                CustomBranding = db.Subscriptions.IgnoreQueryFilters().Where(s => s.TenantId == t.Id).Select(s => (bool?)s.Plan.CustomBranding).FirstOrDefault()
+            })
             .FirstOrDefaultAsync(ct);
         return tenant is null
             ? Results.NotFound()
-            : Results.Ok(new { tenant.Name, tenant.Tagline, logoUrl = LogoUrl(tenant.Id, tenant.LogoVersion) });
+            : Results.Ok(new { tenant.Name, tenant.Tagline, logoUrl = tenant.CustomBranding == false ? null : LogoUrl(tenant.Id, tenant.LogoVersion) });
     }
 
     private static async Task<IResult> Logo(Guid tenantId, int? v, AcademyDbContext db, HttpContext http, CancellationToken ct)

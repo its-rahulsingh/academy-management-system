@@ -1,4 +1,5 @@
 using Academy.Api.Domain;
+using Academy.Api.Infrastructure.Email;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Billing;
 using Academy.Api.Infrastructure.Tenancy;
@@ -26,6 +27,35 @@ public sealed class UnitTests
         Assert.Equal(allowed, result.Allowed);
         Assert.Equal(inGrace, result.InGrace);
         Assert.Equal(allowed && !inGrace, result.Reason is null);
+    }
+
+    [Theory]
+    [InlineData(TenantStatus.Active, SubscriptionStatus.Active, true)]
+    [InlineData(TenantStatus.Active, SubscriptionStatus.PastDue, true)]
+    [InlineData(TenantStatus.Active, SubscriptionStatus.Cancelled, false)]
+    [InlineData(TenantStatus.Suspended, SubscriptionStatus.Active, false)]
+    public void Free_subscription_never_expires_but_can_be_cancelled_or_suspended(TenantStatus tenant, SubscriptionStatus subscription, bool allowed)
+    {
+        var result = TenantAccessRules.Evaluate(tenant, subscription, Today.AddDays(-400), Today, graceDays: 7, free: true);
+
+        Assert.Equal(allowed, result.Allowed);
+        Assert.False(result.InGrace);
+    }
+
+    [Theory]
+    [InlineData("Receipt", "Riverside", "office@riverside.test")]
+    [InlineData("Invoice", "Ojas", "info.ojasedu@gmail.com")]
+    public void Academy_mail_replies_to_the_academy_and_ojas_mail_replies_to_ojas(string category, string name, string replyTo)
+    {
+        var academyId = Guid.NewGuid();
+        var academies = new Dictionary<Guid, EmailSender> { [academyId] = new("Riverside", "office@riverside.test") };
+        var platform = new EmailSender("Ojas", new EmailOptions().ReplyTo);
+
+        var sender = EmailSender.Choose(academyId, category, academies, platform);
+
+        Assert.Equal(name, sender.FromName);
+        Assert.Equal(replyTo, sender.ReplyTo);
+        Assert.Same(platform, EmailSender.Choose(null, "PasswordReset", academies, platform));
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-using Academy.Api.Data;
+﻿using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Tenancy;
@@ -73,9 +73,15 @@ public static class AdmissionEndpoints
                 .ToListAsync(ct)
             : [];
 
+        // On a plan without custom branding the logo is hidden and the form keeps the "Powered by Ojas" credit.
+        var branding = (await access.GetAsync(tenant.Id, ct))?.CustomBranding ?? true;
         return Results.Ok(new
         {
-            academy = new { tenant.Name, tenant.Tagline, logoUrl = BrandingEndpoints.LogoUrl(tenant.Id, tenant.LogoVersion) },
+            academy = new
+            {
+                tenant.Name, tenant.Tagline, customBranding = branding,
+                logoUrl = branding ? BrandingEndpoints.LogoUrl(tenant.Id, tenant.LogoVersion) : null
+            },
             open = open && courses.Count > 0,
             courses
         });

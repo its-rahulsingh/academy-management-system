@@ -29,9 +29,14 @@ import { UI } from '../../shared/ui';
           </div>
           <div class="course-number">{{ plan.price | money }}<small>PER {{ plan.interval === 'Monthly' ? 'MONTH' : plan.interval === 'Quarterly' ? 'QUARTER' : 'YEAR' }}</small></div>
           <p class="muted">{{ plan.description }}</p>
+          <p class="muted small">
+            {{ plan.maxReceiptEmailsPerMonth === null ? 'Unlimited' : plan.maxReceiptEmailsPerMonth }} emailed receipts a month ·
+            {{ plan.customBranding ? 'Own logo' : 'Ojas branding' }}
+          </p>
           <div class="course-bottom">
             <div><strong>{{ plan.maxStudents ?? '∞' }}</strong><small>STUDENTS</small></div>
-            <div><strong>{{ plan.maxUsers ?? '∞' }}</strong><small>USERS</small></div>
+            <div><strong>{{ plan.maxFaculty ?? '∞' }}</strong><small>FACULTY</small></div>
+            <div><strong>{{ plan.maxUsers ?? '∞' }}</strong><small>STAFF</small></div>
             <div><strong>{{ plan.subscribers }}</strong><small>ACADEMIES</small></div>
             <button type="button" class="table-action push-right" (click)="open(plan)">Edit →</button>
           </div>
@@ -62,10 +67,18 @@ import { UI } from '../../shared/ui';
         </div>
         <div class="two-fields">
           <div><label for="maxStudents">Student limit</label><input id="maxStudents" type="number" min="1" [(ngModel)]="model.maxStudents" placeholder="Unlimited" /></div>
-          <div><label for="maxUsers">User limit</label><input id="maxUsers" type="number" min="1" [(ngModel)]="model.maxUsers" placeholder="Unlimited" /></div>
+          <div><label for="maxUsers">Staff login limit</label><input id="maxUsers" type="number" min="1" [(ngModel)]="model.maxUsers" placeholder="Unlimited" /></div>
         </div>
+        <div class="two-fields">
+          <div><label for="maxFaculty">Faculty limit</label><input id="maxFaculty" type="number" min="1" [(ngModel)]="model.maxFaculty" placeholder="Unlimited" /></div>
+          <div><label for="maxEmails">Emailed receipts a month</label><input id="maxEmails" type="number" min="0" [(ngModel)]="model.maxReceiptEmailsPerMonth" placeholder="Unlimited" /></div>
+        </div>
+        <label class="check"><input type="checkbox" [(ngModel)]="model.customBranding" /> Academy's own logo (hides "Powered by Ojas")</label>
         <label class="check"><input type="checkbox" [(ngModel)]="model.isActive" /> Available for new academies</label>
-        <div class="helper">Changing the price affects new academies only. Existing subscriptions keep the price they signed up at until you change it on the academy.</div>
+        <div class="helper">
+          Limit changes apply right away to every academy on this plan; nothing is ever deleted, academies over a new limit just cannot add more.
+          Price changes affect new academies only; existing subscriptions keep their price until you change it on the academy.
+        </div>
       </app-modal>
     }
   `,
@@ -90,13 +103,15 @@ export class PlansComponent {
   private blank() {
     return {
       id: '', code: '', name: '', description: '', price: 0, interval: 'Monthly' as BillingInterval,
-      maxStudents: null as number | null, maxUsers: null as number | null, isActive: true,
+      maxStudents: null as number | null, maxUsers: null as number | null, maxFaculty: null as number | null,
+      maxReceiptEmailsPerMonth: null as number | null, customBranding: true, isActive: true,
     };
   }
 
   protected open(plan?: Plan): void {
     this.model = plan
-      ? { id: plan.id, code: plan.code, name: plan.name, description: plan.description, price: plan.price, interval: plan.interval, maxStudents: plan.maxStudents, maxUsers: plan.maxUsers, isActive: plan.isActive }
+      ? { id: plan.id, code: plan.code, name: plan.name, description: plan.description, price: plan.price, interval: plan.interval, maxStudents: plan.maxStudents, maxUsers: plan.maxUsers,
+          maxFaculty: plan.maxFaculty, maxReceiptEmailsPerMonth: plan.maxReceiptEmailsPerMonth, customBranding: plan.customBranding, isActive: plan.isActive }
       : this.blank();
     this.form.show();
   }
@@ -105,7 +120,12 @@ export class PlansComponent {
     const { id, ...body } = this.model;
     if (!body.name.trim()) return this.form.fail('Enter a plan name.');
     // An emptied number input yields '' or null; both mean "no limit".
-    const payload = { ...body, maxStudents: body.maxStudents || null, maxUsers: body.maxUsers || null };
+    // Receipts allow 0 (no emailed receipts), so only an empty field means unlimited there.
+    const emails = body.maxReceiptEmailsPerMonth;
+    const payload = {
+      ...body, maxStudents: body.maxStudents || null, maxUsers: body.maxUsers || null, maxFaculty: body.maxFaculty || null,
+      maxReceiptEmailsPerMonth: emails === null || (emails as unknown) === '' ? null : emails,
+    };
     this.form.submit(id ? this.api.put(`platform/plans/${id}`, payload) : this.api.post('platform/plans', payload), () => {
       this.notify.success('Plan saved');
       this.load();

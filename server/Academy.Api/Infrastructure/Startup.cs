@@ -204,20 +204,13 @@ public static class Startup
         });
     }
 
-    /// <summary>Applies pending migrations, then makes sure a platform owner and a starting price list exist.</summary>
+    /// <summary>Applies pending migrations (which include the price list), then makes sure a platform owner exists.</summary>
     public static async Task InitializeDatabaseAsync(this WebApplication app)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AcademyDbContext>();
+        // The FreemiumPlans migration creates the Free, Basic and Pro price list, so a new database starts with it.
         await db.Database.MigrateAsync();
-
-        if (!await db.Plans.AnyAsync())
-        {
-            db.Plans.AddRange(
-                new Plan { Code = "starter", Name = "Starter", Description = "For single-location academies getting organised.", Price = 2499, Interval = BillingInterval.Monthly },
-                new Plan { Code = "growth", Name = "Growth", Description = "For growing academies that need complete visibility.", Price = 6999, Interval = BillingInterval.Monthly });
-            await db.SaveChangesAsync();
-        }
 
         // OWNER_* is the current name; ADMIN_* is still read so existing deployments keep working.
         var email = (app.Configuration["OWNER_EMAIL"] ?? app.Configuration["ADMIN_EMAIL"] ?? "").Trim().ToLowerInvariant();

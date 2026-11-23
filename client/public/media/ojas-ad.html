@@ -47,9 +47,10 @@
 <script>
 // ---- Edit these to change the offer and contact line --------------------------------
 const CONFIG = {
-  offerTop: '6 months',
+  offerLead: 'Small class? Use Ojas',
+  offerTop: 'completely',
   offerBig: 'FREE',
-  offerSmall: 'No card needed. We set everything up for you.',
+  offerSmall: 'Up to 25 students free. Bigger plans from just ₹199 a month.',
   contact: 'DM “DEMO” to get started',
 };
 // ------------------------------------------------------------------------------------------
@@ -361,7 +362,7 @@ function sCta(lt) {
   rg.addColorStop(0, `rgba(255,181,71,${glow})`); rg.addColorStop(1, 'rgba(255,181,71,0)');
   ctx.fillStyle = rg; ctx.fillRect(0, 300, W, 1200);
   enter(lt, 0.05, () => { logo(330, 330, 110); text('Ojas', 470, 345, { size: 76, weight: 800, color: '#fff' }); });
-  enter(lt, 0.3, () => text('Start today with', W / 2, 600, { size: 50, weight: 700, color: '#e6e3ff', align: 'center' }));
+  enter(lt, 0.3, () => text(CONFIG.offerLead, W / 2, 600, { size: 50, weight: 700, color: '#e6e3ff', align: 'center' }));
   enter(lt, 0.5, () => text(CONFIG.offerTop, W / 2, 680, { size: 150, weight: 800, color: '#fff', align: 'center' }));
   pop(lt, 0.8, 540, 980, () => text(CONFIG.offerBig, W / 2, 860, { size: 250, weight: 800, color: C.amber, align: 'center', spacing: 4 }), 0.6);
   enter(lt, 1.3, () => text(CONFIG.offerSmall, W / 2, 1140, { size: 40, weight: 600, color: '#e6e3ff', align: 'center', maxW: 860, lh: 1.3 }));

@@ -82,7 +82,9 @@ import { BrandMarkComponent, MoneyPipe } from '../../shared/ui';
             </form>
           }
         </section>
-        <p class="apply-foot">Powered by Ojas</p>
+        @if (!f.academy.customBranding) {
+          <p class="apply-foot">Powered by <a href="/" target="_blank" rel="noopener">Ojas</a></p>
+        }
       } @else if (error()) {
         <section class="apply-card"><div class="alert" role="alert">{{ error() }}</div></section>
       } @else {

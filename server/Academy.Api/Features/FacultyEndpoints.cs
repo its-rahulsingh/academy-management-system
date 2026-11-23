@@ -1,4 +1,4 @@
-using Academy.Api.Data;
+﻿using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Tenancy;
@@ -135,9 +135,11 @@ public static class FacultyEndpoints
         faculty.Active = request.Active;
     }
 
-    private static async Task<IResult> Create(FacultyRequest request, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Create(
+        FacultyRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
     {
         if (ValidateFaculty(request) is { } error) return ApiResults.Bad(error);
+        if (request.Active && await PlanLimits.FacultyLimitAsync(db, access, currentUser.TenantId!.Value, ct) is { } limit) return ApiResults.Bad(limit);
         var faculty = new Faculty();
         Apply(faculty, request);
         db.Faculty.Add(faculty);
@@ -147,9 +149,14 @@ public static class FacultyEndpoints
         return Results.Created($"/api/faculty/{faculty.Id}", new { faculty.Id });
     }
 
-    private static async Task<IResult> Update(Guid id, FacultyRequest request, AcademyDbContext db, CancellationToken ct)
+    private static async Task<IResult> Update(
+        Guid id, FacultyRequest request, AcademyDbContext db, TenantAccessService access, ICurrentUser currentUser, CancellationToken ct)
     {
         if (ValidateFaculty(request) is { } error) return ApiResults.Bad(error);
+        // Making an inactive faculty member active again counts against the plan's limit like adding a new one.
+        if (request.Active && await db.Faculty.AnyAsync(f => f.Id == id && !f.Active, ct)
+            && await PlanLimits.FacultyLimitAsync(db, access, currentUser.TenantId!.Value, ct) is { } limit)
+            return ApiResults.Bad(limit);
 
         return await db.InTransactionAsync<IResult>(async () =>
         {

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
@@ -17,7 +17,7 @@ public static class Money
         currency == "INR" ? "₹" + amount.ToString("N2", India) : $"{currency} {amount:N2}";
 }
 
-public sealed record BillingCycleResult(int InvoicesCreated, int MarkedPastDue);
+public sealed record BillingCycleResult(int InvoicesCreated, int MarkedPastDue, int MovedToFree = 0);
 
 /// <summary>
 /// Subscription lifecycle: raise the renewal invoice ahead of period end, extend access when it is paid,
@@ -112,22 +112,35 @@ public sealed class BillingService(
         return true;
     }
 
-    /// <summary>One pass of the recurring billing job. Each subscription is handled on its own so one failure cannot block the rest.</summary>
+    /// <summary>
+    /// One pass of the recurring billing job. Each subscription is handled on its own so one failure cannot block the rest.
+    /// Free subscriptions (price 0) never expire, so they are left alone. A paid trial that ends unpaid, and a paid
+    /// subscription still unpaid when its grace period ends, move to the Free plan instead of being locked out.
+    /// </summary>
     public async Task<BillingCycleResult> RunCycleAsync(CancellationToken ct)
     {
         var today = Today;
         var invoiceFrom = today.AddDays(options.Value.InvoiceLeadDays);
         var due = await db.Subscriptions.IgnoreQueryFilters()
-            .Where(s => s.Status != SubscriptionStatus.Cancelled && s.CurrentPeriodEnd <= invoiceFrom)
+            .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Price > 0 && s.CurrentPeriodEnd <= invoiceFrom)
             .Where(s => db.Tenants.Any(t => t.Id == s.TenantId && t.Status == TenantStatus.Active))
             .ToListAsync(ct);
 
-        int created = 0, pastDue = 0;
+        int created = 0, pastDue = 0, movedToFree = 0;
         foreach (var subscription in due)
         {
             try
             {
-                if (subscription.Price > 0 && await CreateRenewalInvoiceAsync(subscription, ct) is not null) created++;
+                if (subscription.Status == SubscriptionStatus.Trialing && today > subscription.CurrentPeriodEnd)
+                {
+                    if (await MoveToFreeAsync(subscription, "Your free trial has ended", ct)) { movedToFree++; continue; }
+                }
+                else if (subscription.Status == SubscriptionStatus.PastDue && today > subscription.CurrentPeriodEnd.AddDays(options.Value.GraceDays))
+                {
+                    if (await MoveToFreeAsync(subscription, "The invoice for your plan was not paid in time", ct)) { movedToFree++; continue; }
+                }
+
+                if (await CreateRenewalInvoiceAsync(subscription, ct) is not null) created++;
 
                 if (today > subscription.CurrentPeriodEnd && subscription.Status is SubscriptionStatus.Trialing or SubscriptionStatus.Active)
                 {
@@ -144,7 +157,46 @@ public sealed class BillingService(
                 db.ChangeTracker.Clear();
             }
         }
-        return new BillingCycleResult(created, pastDue);
+        return new BillingCycleResult(created, pastDue, movedToFree);
+    }
+
+    /// <summary>
+    /// Puts the subscription on the Free plan, voids its unpaid invoices and tells the Super Admins.
+    /// Returns false when there is no active Free plan, so the caller falls back to the paid lifecycle.
+    /// Nothing is deleted: records over the Free limits stay, the academy just cannot add more.
+    /// </summary>
+    public async Task<bool> MoveToFreeAsync(Subscription subscription, string why, CancellationToken ct)
+    {
+        var free = await db.Plans.FirstOrDefaultAsync(p => p.Code == PlanCodes.Free && p.IsActive, ct);
+        if (free is null || subscription.PlanId == free.Id && subscription.Price <= 0) return false;
+
+        var today = Today;
+        subscription.PlanId = free.Id;
+        subscription.Price = free.Price;
+        subscription.Currency = free.Currency;
+        subscription.Interval = free.Interval;
+        subscription.Status = SubscriptionStatus.Active;
+        subscription.CurrentPeriodStart = today;
+        subscription.CurrentPeriodEnd = today;
+        subscription.UpdatedAtUtc = DateTime.UtcNow;
+
+        var open = await db.SubscriptionInvoices.IgnoreQueryFilters()
+            .Where(i => i.SubscriptionId == subscription.Id && i.Status == InvoiceStatus.Open)
+            .ToListAsync(ct);
+        foreach (var invoice in open)
+        {
+            invoice.Status = InvoiceStatus.Void;
+            invoice.Notes = "Moved to the Free plan.";
+        }
+
+        var tenantName = await db.Tenants.IgnoreQueryFilters().Where(t => t.Id == subscription.TenantId).Select(t => t.Name).FirstAsync(ct);
+        var (subject, body) = EmailTemplates.MovedToFree(tenantName, why, free);
+        foreach (var address in await SuperAdminEmailsAsync(subscription.TenantId, ct))
+            email.Enqueue(subscription.TenantId, address, subject, body, "Invoice");
+
+        await db.SaveChangesAsync(ct);
+        access.Invalidate(subscription.TenantId);
+        return true;
     }
 
     private Task<List<string>> SuperAdminEmailsAsync(Guid tenantId, CancellationToken ct) =>
@@ -168,9 +220,9 @@ public sealed class BillingCycleService(IServiceScopeFactory scopes, ILogger<Bil
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var result = await scope.ServiceProvider.GetRequiredService<BillingService>().RunCycleAsync(stoppingToken);
-                if (result.InvoicesCreated > 0 || result.MarkedPastDue > 0)
-                    logger.LogInformation("Billing cycle: {Created} invoices raised, {PastDue} subscriptions past due",
-                        result.InvoicesCreated, result.MarkedPastDue);
+                if (result.InvoicesCreated > 0 || result.MarkedPastDue > 0 || result.MovedToFree > 0)
+                    logger.LogInformation("Billing cycle: {Created} invoices raised, {PastDue} subscriptions past due, {Free} moved to Free",
+                        result.InvoicesCreated, result.MarkedPastDue, result.MovedToFree);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

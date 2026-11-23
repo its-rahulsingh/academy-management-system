@@ -1,4 +1,4 @@
-using Academy.Api.Data;
+﻿using Academy.Api.Data;
 using Academy.Api.Domain;
 using Academy.Api.Infrastructure.Auth;
 using Academy.Api.Infrastructure.Billing;
@@ -250,7 +250,7 @@ public static class StudentEndpoints
     /// The student is then "Settled": nothing is due and reminders stop. The write-off is reported separately from
     /// discounts, and can be voided like any other entry if it was a mistake.
     /// </summary>
-    private static async Task<IResult> Settle(Guid id, SettleRequest request, AcademyDbContext db, EmailQueue emails, CancellationToken ct)
+    private static async Task<IResult> Settle(Guid id, SettleRequest request, AcademyDbContext db, EmailQueue emails, TenantAccessService access, CancellationToken ct)
     {
         if (!Validate.Reason(request.Reason)) return ApiResults.Bad("Give a reason for the settlement, e.g. \"Final settlement agreed with parent\".");
         var final = request.FinalPayment ?? 0;
@@ -284,7 +284,8 @@ public static class StudentEndpoints
                 db.StudentPayments.Add(payment);
                 receipt = StudentLedger.ReceiptLabel(payment.ReceiptNumber);
                 // Once settled nothing is due, so the receipt says so.
-                emailed = PaymentEndpoints.QueueReceipt(emails, db.CurrentTenantId, balance, payment, balance.Paid + final, 0);
+                var allowed = await PlanLimits.ReceiptEmailAllowedAsync(db, access, db.CurrentTenantId, ct);
+                emailed = PaymentEndpoints.QueueReceipt(emails, db.CurrentTenantId, balance, payment, balance.Paid + final, 0, allowed);
             }
 
             var writtenOff = balance.Pending - final;
