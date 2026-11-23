@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ojas Instagram Ad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #f1f2f8; --ink: #1e2438; --muted: #6b7088; --brand: #5147df; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Manrope, system-ui, sans-serif; }
+  main { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; padding: 24px 16px; }
+  canvas { height: min(86vh, 960px); aspect-ratio: 9 / 16; max-width: 100%; border-radius: 18px; box-shadow: 0 20px 60px #1e243833; background: #000; }
+  .panel { max-width: 340px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.03em; }
+  p { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  button { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; background: #e4e3fb; color: var(--brand); }
+  button.primary { background: var(--brand); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=range] { width: 100%; }
+  #status { font-size: 13px; font-weight: 700; color: var(--brand); min-height: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="c" width="1080" height="1920"></canvas>
+  <div class="panel">
+    <h1>Ojas — 30s Reel</h1>
+    <p>1080×1920, made for Instagram Reels and Stories. Add music inside Instagram when you post.</p>
+    <div class="row">
+      <button id="play" class="primary">▶ Play</button>
+      <button id="restart">↺ Restart</button>
+    </div>
+    <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+    <p id="time">0.0s</p>
+    <div class="row"><button id="record" class="primary">● Record &amp; download video</button></div>
+    <div id="status"></div>
+    <p>Recording plays the ad once in real time (about 30 s). Keep this tab visible until it downloads.</p>
+  </div>
+</main>
+<script>
+// ---- Edit these to change the offer and contact line --------------------------------
+const CONFIG = {
+  offerTop: '6 months',
+  offerBig: 'FREE',
+  offerSmall: 'No card needed. We set everything up for you.',
+  contact: 'DM “DEMO” to get started',
+};
+// ------------------------------------------------------------------------------------------
+
+const W = 1080, H = 1920, FPS = 30;
+const C = { brand: '#5147df', brand2: '#6a5cf2', deep: '#16153a', deep2: '#2c2a5a', ink: '#1e2438', muted: '#7d8299',
+  light: '#f6f7fc', line: '#e8e9f2', green: '#1fa971', red: '#e5484d', orange: '#f08a24', yellow: '#e8b100', amber: '#ffb547' };
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const back = x => { x = clamp(x); const s = 1.7; return 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2); };
+const prog = (lt, at, dur = 0.5) => ease((lt - at) / dur);
+
+function font(size, weight = 700) { return `${weight} ${size}px Manrope, "Segoe UI Emoji", sans-serif`; }
+
+function text(str, x, y, o = {}) {
+  const { size = 48, weight = 700, color = C.ink, align = 'left', maxW = 0, lh = 1.18, spacing = 0 } = o;
+  ctx.save();
+  ctx.font = font(size, weight); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top';
+  ctx.letterSpacing = spacing + 'px';
+  let lines = [str];
+  if (maxW) {
+    lines = []; let cur = '';
+    for (const w of str.split(' ')) {
+      const t = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+    }
+    lines.push(cur);
+  }
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * size * lh));
+  ctx.restore();
+  return lines.length * size * lh;
+}
+
+function rr(x, y, w, h, r, fill, stroke, lw = 2) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+
+function shadow(blur = 50, color = '#0f123040', dy = 20) { ctx.shadowColor = color; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+function noShadow() { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; }
+
+// Slide-up + fade entry for whatever fn draws.
+function enter(lt, at, fn, dist = 60, dur = 0.55) {
+  const p = prog(lt, at, dur);
+  if (p <= 0) return;
+  ctx.save(); ctx.globalAlpha *= p; ctx.translate(0, (1 - p) * dist); fn(p); ctx.restore();
+}
+function pop(lt, at, cx, cy, fn, dur = 0.55) {
+  const p = clamp((lt - at) / dur);
+  if (p <= 0) return;
+  const s = back(p);
+  ctx.save(); ctx.globalAlpha *= clamp(p * 2); ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy); fn(); ctx.restore();
+}
+
+function chip(x, y, label, bg, fg, size = 24) {
+  ctx.save(); ctx.font = font(size, 800);
+  const w = ctx.measureText(label).width + size * 1.3, h = size * 1.75;
+  rr(x - w, y, w, h, h / 2, bg);
+  ctx.restore();
+  text(label, x - w / 2, y + size * 0.36, { size, weight: 800, color: fg, align: 'center' });
+}
+
+// The Ojas mark: ring with a glowing spark (same as favicon.svg).
+function logo(x, y, s) {
+  const k = s / 64;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  const g = ctx.createLinearGradient(0, 0, 64, 64); g.addColorStop(0, '#6a5cf2'); g.addColorStop(1, '#4236c9');
+  rr(0, 0, 64, 64, 18, g);
+  ctx.beginPath(); ctx.arc(30, 35, 14.5, 0, Math.PI * 2); ctx.strokeStyle = '#fff'; ctx.lineWidth = 7.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(45.5, 18.5, 7.5, 0, Math.PI * 2); ctx.fillStyle = C.amber; ctx.fill();
+  ctx.strokeStyle = '#5246d8'; ctx.lineWidth = 3.5; ctx.stroke();
+  ctx.restore();
+}
+
+function qr(x, y, s, seed) {
+  const n = 25, c = s / n;
+  let r = seed * 7919 + 17;
+  const rnd = () => { r = (r * 16807) % 2147483647; return r / 2147483647; };
+  ctx.fillStyle = C.ink;
+  const inFinder = (i, j) => (i < 8 && j < 8) || (i > n - 9 && j < 8) || (i < 8 && j > n - 9);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (inFinder(i, j)) continue;
+    if (rnd() > 0.52) ctx.fillRect(x + i * c, y + j * c, c + 0.5, c + 0.5);
+  }
+  for (const [fi, fj] of [[0, 0], [n - 7, 0], [0, n - 7]]) {
+    const fx = x + fi * c, fy = y + fj * c;
+    ctx.fillRect(fx, fy, 7 * c, 7 * c);
+    ctx.fillStyle = '#fff'; ctx.fillRect(fx + c, fy + c, 5 * c, 5 * c);
+    ctx.fillStyle = C.ink; ctx.fillRect(fx + 2 * c, fy + 2 * c, 3 * c, 3 * c);
+  }
+}
+
+function phone(x, y, w, h, draw, screen = '#fff') {
+  ctx.save(); shadow(70, '#0b0d2a55', 30); rr(x - 16, y - 16, w + 32, h + 32, 72, '#111322'); noShadow(); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 58); ctx.clip();
+  ctx.fillStyle = screen; ctx.fillRect(x, y, w, h); draw(); ctx.restore();
+  rr(x + w / 2 - 70, y + 16, 140, 32, 16, '#111322');
+}
+
+function bg(kind) {
+  if (kind === 'light') {
+    ctx.fillStyle = C.light; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#5147df10'; ctx.beginPath(); ctx.arc(980, 260, 300, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1fa97110'; ctx.beginPath(); ctx.arc(80, 1700, 340, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  const g = ctx.createLinearGradient(0, 0, W * 0.4, H);
+  if (kind === 'brand') { g.addColorStop(0, '#6a5cf2'); g.addColorStop(1, '#3a2fb8'); }
+  else { g.addColorStop(0, C.deep2); g.addColorStop(1, C.deep); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff0c'; ctx.beginPath(); ctx.arc(960, 300, 320, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(120, 1650, 380, 0, Math.PI * 2); ctx.fill();
+}
+
+// Kicker, title and subtitle at the top of a feature scene. Kept inside Reels' safe area.
+function headline(lt, kicker, kickColor, title, sub, dark) {
+  enter(lt, 0.1, () => text(kicker, W / 2, 250, { size: 30, weight: 800, color: kickColor, align: 'center', spacing: 6 }));
+  let h = 0;
+  enter(lt, 0.25, () => { h = text(title, W / 2, 305, { size: 92, weight: 800, color: dark ? '#fff' : C.ink, align: 'center', maxW: 940, lh: 1.08 }); });
+  h = h || 100;
+  enter(lt, 0.45, () => text(sub, W / 2, 330 + h, { size: 38, weight: 600, color: dark ? '#c7c6ec' : C.muted, align: 'center', maxW: 900, lh: 1.3 }));
+}
+
+// ---------- scenes ----------
+function sHook(lt) {
+  bg('dark');
+  const items = [['📒', 170, 420, 0], ['📊', 860, 520, 1], ['💬', 210, 1430, 2], ['🧾', 860, 1360, 3], ['📞', 540, 1560, 4]];
+  for (const [e, x, y, i] of items) {
+    pop(lt, 0.15 + i * 0.12, x, y, () => {
+      const wob = Math.sin(lt * 6 + i) * 0.12;
+      ctx.save(); ctx.translate(x, y + Math.sin(lt * 2 + i) * 14); ctx.rotate(wob);
+      ctx.font = font(130); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(e, 0, 0); ctx.restore();
+    });
+  }
+  enter(lt, 0.2, () => text('Still running your academy on', W / 2, 760, { size: 56, weight: 700, color: '#c7c6ec', align: 'center' }));
+  enter(lt, 0.6, () => text('registers,', W / 2, 850, { size: 120, weight: 800, color: '#fff', align: 'center' }));
+  enter(lt, 0.9, () => text('Excel sheets', W / 2, 990, { size: 120, weight: 800, color: '#fff', align: 'center' }));
+  enter(lt, 1.2, () => text('& WhatsApp?', W / 2, 1130, { size: 120, weight: 800, color: C.amber, align: 'center' }));
+}
+
+function sBrand(lt) {
+  bg('brand');
+  // glow pulse behind the logo
+  const glow = 0.25 + 0.1 * Math.sin(lt * 4);
+  const rg = ctx.createRadialGradient(540, 760, 40, 540, 760, 420);
+  rg.addColorStop(0, `rgba(255,181,71,${glow})`); rg.addColorStop(1, 'rgba(255,181,71,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0, 300, W, 900);
+  pop(lt, 0.1, 540, 760, () => { ctx.save(); shadow(60, '#0b0d2a66', 24); logo(540 - 150, 610, 300); ctx.restore(); }, 0.7);
+  enter(lt, 0.55, () => text('Ojas', W / 2, 990, { size: 190, weight: 800, color: '#fff', align: 'center', spacing: -4 }));
+  enter(lt, 0.9, () => text('Your whole academy. One app.', W / 2, 1220, { size: 56, weight: 700, color: '#e6e3ff', align: 'center' }));
+}
+
+function sFees(lt) {
+  bg('light');
+  headline(lt, 'FEES', C.green, 'Fees, sorted.', 'Instalments, reminders and a receipt emailed for every payment.', false);
+  const x = 230, y = 760, w = 620, h = 820;
+  enter(lt, 0.4, () => phone(x, y, w, h, () => {
+    const g = ctx.createLinearGradient(x, y, x + w, y + 170); g.addColorStop(0, C.brand2); g.addColorStop(1, C.brand);
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, 170);
+    text('Fee collection', x + 40, y + 70, { size: 38, weight: 800, color: '#fff' });
+    text('Batch 2026-27', x + 40, y + 118, { size: 24, weight: 600, color: '#dcd8ff' });
+    const rows = [['AS', 'Aarav Sharma', 'JEE · Class 12', '₹12,000', 'Paid'], ['PP', 'Priya Patel', 'NEET · Class 11', '₹8,500', 'Due'],
+      ['RM', 'Rohan Mehta', 'Foundation · Class 9', '₹6,000', 'Paid'], ['SI', 'Sneha Iyer', 'JEE · Class 11', '₹10,000', 'Due']];
+    rows.forEach(([ini, name, course, amt, st], i) => enter(lt, 0.8 + i * 0.15, () => {
+      const ry = y + 200 + i * 115;
+      ctx.fillStyle = '#efedff'; ctx.beginPath(); ctx.arc(x + 75, ry + 48, 36, 0, Math.PI * 2); ctx.fill();
+      text(ini, x + 75, ry + 34, { size: 26, weight: 800, color: C.brand, align: 'center' });
+      text(name, x + 130, ry + 18, { size: 30, weight: 800 });
+      text(course, x + 130, ry + 56, { size: 22, weight: 600, color: C.muted });
+      text(amt, x + w - 40, ry + 14, { size: 28, weight: 800, align: 'right' });
+      const paid = st === 'Paid' || (i === 1 && lt > 2.4);
+      if (i === 1 && lt > 2.4 && lt < 2.9) { ctx.save(); const s = 1 + 0.15 * Math.sin((lt - 2.4) * Math.PI * 2); ctx.translate(x + w - 80, ry + 70); ctx.scale(s, s); ctx.translate(-(x + w - 80), -(ry + 70)); chip(x + w - 40, ry + 52, 'Paid', '#e3f6ee', C.green, 22); ctx.restore(); }
+      else chip(x + w - 40, ry + 52, paid ? 'Paid' : 'Due', paid ? '#e3f6ee' : '#fdecec', paid ? C.green : C.red, 22);
+      ctx.fillStyle = C.line; ctx.fillRect(x + 40, ry + 108, w - 80, 2);
+    }, 30));
+    enter(lt, 2.7, () => {
+      rr(x + 30, y + h - 175, w - 60, 135, 26, C.ink);
+      text('✉️', x + 70, y + h - 140, { size: 50 });
+      text('Receipt emailed to Priya', x + 150, y + h - 145, { size: 30, weight: 800, color: '#fff' });
+      text('₹8,500 paid · Balance due ₹0', x + 150, y + h - 100, { size: 24, weight: 600, color: '#b9bcd3' });
+    }, 80);
+  }), 120, 0.7);
+}
+
+function sAttendance(lt) {
+  bg('dark');
+  headline(lt, 'FACULTY ATTENDANCE', C.amber, 'No more fake attendance.', 'Teachers clock in by scanning a QR that changes every 20 seconds — or by location.', true);
+  enter(lt, 0.5, () => {
+    ctx.save(); shadow(60, '#00000066', 24); rr(290, 760, 500, 560, 36, '#fff'); ctx.restore();
+    text('Class check-in', 540, 800, { size: 30, weight: 800, align: 'center' });
+    const seed = lt < 2.6 ? 3 : 11;
+    qr(370, 860, 340, seed);
+    if (lt > 2.6 && lt < 2.9) { ctx.fillStyle = `rgba(81,71,223,${0.5 * (1 - (lt - 2.6) / 0.3)})`; ctx.fillRect(370, 860, 340, 340); }
+    // scan line
+    if (lt > 0.9 && lt < 2.4) { const sy = 860 + ((lt - 0.9) / 1.5) * 340; ctx.fillStyle = '#1fa971cc'; ctx.fillRect(360, sy, 360, 6); }
+    const left = Math.max(0, 20 - Math.floor(((lt - 0.5) * 5) % 20));
+    rr(370, 1230, 340, 12, 6, C.line);
+    rr(370, 1230, 340 * (left / 20), 12, 6, C.brand);
+    text(`New code in ${left}s`, 540, 1258, { size: 24, weight: 700, color: C.muted, align: 'center' });
+  });
+  enter(lt, 1.6, () => {
+    rr(150, 1370, 780, 180, 32, '#ffffff14', '#ffffff2a');
+    ctx.fillStyle = C.green; ctx.beginPath(); ctx.arc(210, 1420, 12, 0, Math.PI * 2); ctx.fill();
+    text('Clocked in · Physics, Class 11', 240, 1404, { size: 28, weight: 700, color: '#d8d7f5' });
+    const secs = Math.max(0, Math.floor((lt - 1.6) * 900));
+    const hh = String(Math.floor(secs / 3600)).padStart(2, '0'), mm = String(Math.floor(secs / 60) % 60).padStart(2, '0'), ss = String(secs % 60).padStart(2, '0');
+    text(`${hh}:${mm}:${ss}`, 195, 1450, { size: 72, weight: 800, color: '#fff' });
+    if (lt > 2.9) chip(890, 1470, '✓ Approved by QR', '#1fa97133', '#6ee7b7', 26);
+  });
+}
+
+function sAdmissions(lt) {
+  bg('light');
+  headline(lt, 'ONLINE ADMISSIONS', C.brand, 'Admissions, online.', 'Print your QR. Parents apply from their phone. You approve in one tap.', false);
+  enter(lt, 0.4, () => {
+    ctx.save(); ctx.translate(320, 1050); ctx.rotate(-0.06); ctx.translate(-320, -1050);
+    shadow(50, '#1e243833', 20); rr(110, 760, 420, 600, 30, '#fff'); noShadow();
+    const g = ctx.createLinearGradient(110, 760, 530, 900); g.addColorStop(0, C.brand2); g.addColorStop(1, C.brand);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(110, 760, 420, 170, [30, 30, 0, 0]); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    text('ADMISSIONS OPEN', 320, 800, { size: 30, weight: 800, color: '#fff', align: 'center', spacing: 2 });
+    text('2026-27', 320, 850, { size: 44, weight: 800, color: C.amber, align: 'center' });
+    qr(190, 965, 260, 7);
+    text('Scan to apply', 320, 1260, { size: 30, weight: 800, align: 'center' });
+    ctx.restore();
+  }, 80);
+  enter(lt, 0.7, () => phone(600, 740, 380, 640, () => {
+    const x = 600, y = 740;
+    text('Sunrise Classes', x + 30, y + 80, { size: 30, weight: 800 });
+    text('Admission form', x + 30, y + 120, { size: 22, weight: 600, color: C.muted });
+    const typed = (s, at, dur) => s.slice(0, Math.floor(clamp((lt - at) / dur) * s.length));
+    const fields = [['Student name', typed('Ananya Verma', 1.0, 0.7)], ['Course', typed('NEET · Class 11', 1.6, 0.5)], ['Phone', typed('98XXX XX210', 2.0, 0.4)]];
+    fields.forEach(([label, val], i) => {
+      const fy = y + 180 + i * 120;
+      text(label, x + 30, fy, { size: 20, weight: 800, color: '#42465f' });
+      rr(x + 30, fy + 32, 320, 62, 12, '#fff', '#dfe1ec', 2);
+      text(val + (val && lt % 0.8 < 0.4 && lt < 2.5 ? '|' : ''), x + 48, fy + 50, { size: 24, weight: 600 });
+    });
+    const sent = lt > 2.5;
+    rr(x + 30, y + 545, 320, 66, 14, sent ? C.green : C.brand);
+    text(sent ? 'Application sent ✓' : 'Submit', x + 190, y + 563, { size: 26, weight: 800, color: '#fff', align: 'center' });
+  }), 100);
+  enter(lt, 2.7, () => {
+    ctx.save(); shadow(40, '#1e243833', 14); rr(100, 1440, 880, 140, 28, '#fff'); ctx.restore();
+    text('🔔', 140, 1478, { size: 50 });
+    text('New application', 220, 1470, { size: 30, weight: 800 });
+    text('Ananya Verma · NEET Class 11', 220, 1512, { size: 24, weight: 600, color: C.muted });
+    rr(780, 1478, 160, 64, 14, C.brand);
+    text('Approve', 860, 1496, { size: 26, weight: 800, color: '#fff', align: 'center' });
+  });
+}
+
+function sPortal(lt) {
+  bg('dark');
+  headline(lt, 'STUDENT & TEACHER PORTALS', C.amber, 'A portal for everyone.', 'Students see results and report cards. Teachers see their classes and pay.', true);
+  const x = 250, y = 760, w = 580, h = 800;
+  enter(lt, 0.4, () => phone(x, y, w, h, () => {
+    text('Hi, Ananya 👋', x + 40, y + 80, { size: 40, weight: 800 });
+    text('NEET · Class 11 · 2026-27', x + 40, y + 132, { size: 24, weight: 600, color: C.muted });
+    rr(x + 30, y + 190, w - 60, 470, 28, '#f5f4ff');
+    text('Report card · Term 1', x + 60, y + 220, { size: 28, weight: 800, color: C.brand });
+    const subj = [['Physics', 86], ['Chemistry', 78], ['Biology', 92], ['English', 81]];
+    subj.forEach(([s, v], i) => {
+      const sy = y + 290 + i * 88, p = prog(lt, 0.9 + i * 0.15, 0.8);
+      text(s, x + 60, sy, { size: 26, weight: 700 });
+      text(String(Math.round(v * p)), x + w - 60, sy, { size: 26, weight: 800, align: 'right', color: C.ink });
+      rr(x + 60, sy + 40, w - 120, 16, 8, '#e3e1fb');
+      rr(x + 60, sy + 40, (w - 120) * (v / 100) * p, 16, 8, i === 2 ? C.green : C.brand);
+    });
+    enter(lt, 2.3, () => {
+      rr(x + 30, y + 690, w - 60, 80, 20, '#e3f6ee');
+      text('🏆 Latest test: Biology 46/50', x + 60, y + 712, { size: 26, weight: 800, color: '#137a52' });
+    }, 30);
+  }), 120, 0.7);
+}
+
+function sControl(lt) {
+  bg('light');
+  headline(lt, 'FOR THE OWNER', C.red, 'Nothing slips past you.', 'Alerts when something looks off, bills on every expense, a daily report in Excel.', false);
+  const cards = [
+    [C.red, 'Agreed fee lowered', 'Rohan Mehta · changed by front desk', 'Review'],
+    [C.orange, 'Bill removed from an expense', '₹12,400 · Lab equipment', 'Review'],
+    [C.yellow, '3 wrong passwords today', 'Account: accounts@sunrise', 'Review'],
+    [C.green, 'Daily report.xlsx', 'Every payment, expense and class — one sheet', 'Download'],
+  ];
+  cards.forEach(([col, title, sub, btn], i) => enter(lt, 0.6 + i * 0.4, () => {
+    const cy = 760 + i * 180;
+    ctx.save(); shadow(40, '#1e243822', 14); rr(100, cy, 880, 150, 26, '#fff'); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(100, cy, 880, 150, 26); ctx.clip(); ctx.fillStyle = col; ctx.fillRect(100, cy, 14, 150); ctx.restore();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(170, cy + 75, 18, 0, Math.PI * 2); ctx.fill();
+    text(title, 210, cy + 38, { size: 32, weight: 800 });
+    text(sub, 210, cy + 84, { size: 24, weight: 600, color: C.muted });
+    rr(800, cy + 46, 150, 58, 14, i === 3 ? C.green : '#efedff');
+    text(btn, 875, cy + 62, { size: 22, weight: 800, color: i === 3 ? '#fff' : C.brand, align: 'center' });
+  }, 50));
+  enter(lt, 2.3, () => text('Money entries are never deleted — only voided with a reason.', W / 2, 1500, { size: 30, weight: 700, color: C.muted, align: 'center', maxW: 860 }));
+}
+
+function sCta(lt) {
+  bg('brand');
+  const glow = 0.22 + 0.1 * Math.sin(lt * 4);
+  const rg = ctx.createRadialGradient(540, 900, 50, 540, 900, 520);
+  rg.addColorStop(0, `rgba(255,181,71,${glow})`); rg.addColorStop(1, 'rgba(255,181,71,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0, 300, W, 1200);
+  enter(lt, 0.05, () => { logo(330, 330, 110); text('Ojas', 470, 345, { size: 76, weight: 800, color: '#fff' }); });
+  enter(lt, 0.3, () => text('Start today with', W / 2, 600, { size: 50, weight: 700, color: '#e6e3ff', align: 'center' }));
+  enter(lt, 0.5, () => text(CONFIG.offerTop, W / 2, 680, { size: 150, weight: 800, color: '#fff', align: 'center' }));
+  pop(lt, 0.8, 540, 980, () => text(CONFIG.offerBig, W / 2, 860, { size: 250, weight: 800, color: C.amber, align: 'center', spacing: 4 }), 0.6);
+  enter(lt, 1.3, () => text(CONFIG.offerSmall, W / 2, 1140, { size: 40, weight: 600, color: '#e6e3ff', align: 'center', maxW: 860, lh: 1.3 }));
+  enter(lt, 1.6, () => text('Fees · Attendance · Admissions · Portals · Reports', W / 2, 1270, { size: 30, weight: 700, color: '#bdb7ff', align: 'center', maxW: 920 }));
+  enter(lt, 1.9, () => {
+    const s = 1 + 0.03 * Math.sin(lt * 6);
+    ctx.save(); ctx.translate(540, 1420); ctx.scale(s, s); ctx.translate(-540, -1420);
+    shadow(40, '#0b0d2a55', 16); rr(130, 1370, 820, 110, 55, '#fff'); noShadow();
+    text(CONFIG.contact, 540, 1400, { size: 42, weight: 800, color: C.brand, align: 'center' });
+    ctx.restore();
+  });
+}
+
+const SCENES = [[sHook, 3.4], [sBrand, 2.8], [sFees, 4.4], [sAttendance, 4.4], [sAdmissions, 4.2], [sPortal, 3.6], [sControl, 3.8], [sCta, 4.4]];
+const STARTS = []; let acc = 0; for (const [, d] of SCENES) { STARTS.push(acc); acc += d; }
+const TOTAL = acc;
+const FADE = 0.35;
+
+function draw(t) {
+  t = clamp(t, 0, TOTAL - 0.001);
+  let i = STARTS.length - 1; while (STARTS[i] > t) i--;
+  const lt = t - STARTS[i];
+  ctx.save(); ctx.globalAlpha = 1;
+  if (i > 0 && lt < FADE) {
+    SCENES[i - 1][0](SCENES[i - 1][1]);
+    ctx.globalAlpha = ease(lt / FADE);
+  }
+  SCENES[i][0](lt);
+  ctx.restore();
+  noShadow();
+}
+
+// ---------- playback & recording ----------
+const playBtn = document.getElementById('play'), restartBtn = document.getElementById('restart'), recBtn = document.getElementById('record');
+const scrub = document.getElementById('scrub'), timeEl = document.getElementById('time'), statusEl = document.getElementById('status');
+let playing = false, t0 = 0, cur = 0, onEnd = null;
+
+function frame() {
+  if (!playing) return;
+  cur = (performance.now() - t0) / 1000;
+  if (cur >= TOTAL) { cur = TOTAL; playing = false; playBtn.textContent = '▶ Play'; draw(TOTAL); show(); if (onEnd) { const f = onEnd; onEnd = null; f(); } return; }
+  draw(cur); show(); requestAnimationFrame(frame);
+}
+function show() { scrub.value = Math.round(cur / TOTAL * 1000); timeEl.textContent = `${cur.toFixed(1)}s / ${TOTAL.toFixed(1)}s`; }
+function play(from = cur) { if (from >= TOTAL) from = 0; t0 = performance.now() - from * 1000; playing = true; playBtn.textContent = '❚❚ Pause'; requestAnimationFrame(frame); }
+function pause() { playing = false; playBtn.textContent = '▶ Play'; }
+
+playBtn.onclick = () => playing ? pause() : play();
+restartBtn.onclick = () => { cur = 0; play(0); };
+scrub.oninput = () => { pause(); cur = scrub.value / 1000 * TOTAL; draw(cur); show(); };
+
+recBtn.onclick = () => {
+  const types = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  const type = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  if (!type) { statusEl.textContent = 'This browser cannot record video. Use a recent Chrome or Edge.'; return; }
+  const stream = canvas.captureStream(FPS);
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 16_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => {
+    const ext = type.includes('mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(chunks, { type: type.split(';')[0] });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `ojas-instagram-ad.${ext}`; a.click();
+    statusEl.textContent = `Saved ojas-instagram-ad.${ext} (${(blob.size / 1e6).toFixed(1)} MB).` + (ext === 'webm' ? ' This browser made WebM; convert to MP4 before posting.' : '');
+    [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = false);
+  };
+  [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = true);
+  statusEl.textContent = 'Recording… keep this tab visible.';
+  draw(0);
+  rec.start(250);
+  onEnd = () => setTimeout(() => rec.stop(), 400);
+  cur = 0; play(0);
+};
+
+Promise.all([800, 700, 600].map(w => document.fonts.load(`${w} 40px Manrope`))).catch(() => {}).then(() => { draw(0); show(); });
+draw(0);
+</script>
+</body>
+</html>

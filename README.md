@@ -1,4 +1,4 @@
-# AcademyFlow
+# Ojas
 
 Multi-tenant finance management for academies, sold on subscription.
 

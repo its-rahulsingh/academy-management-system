@@ -30,7 +30,7 @@ const PORTAL_NAV = {
     <div class="teacher">
       <header class="teacher-top no-print">
         <div class="teacher-brand">
-          <app-brand-mark [name]="auth.tenant()?.name ?? 'AcademyFlow'" [logoUrl]="auth.tenant()?.logoUrl ?? null" />
+          <app-brand-mark [name]="auth.tenant()?.name ?? 'Ojas'" [logoUrl]="auth.tenant()?.logoUrl ?? null" />
           <div>
             <strong>{{ auth.tenant()?.name }}</strong>
             @if (auth.tenant()?.tagline) {

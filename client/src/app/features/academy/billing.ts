@@ -38,7 +38,7 @@ declare global {
       <div>
         <div class="page-kicker">ACADEMY WORKSPACE</div>
         <h1>Subscription</h1>
-        <p>Your AcademyFlow plan and invoices.</p>
+        <p>Your Ojas plan and invoices.</p>
       </div>
     </div>
 
@@ -143,7 +143,7 @@ export class BillingComponent {
       amount: order.amount,
       currency: order.currency,
       order_id: order.orderId,
-      name: 'AcademyFlow',
+      name: 'Ojas',
       description: `Invoice ${order.invoiceNumber}`,
       // The browser's word is not trusted: the server re-checks the signature before marking the invoice paid.
       handler: result => this.confirm(invoice, result),

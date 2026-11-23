@@ -57,8 +57,8 @@ public static class EmailAdminEndpoints
         var message = new EmailMessage
         {
             ToAddress = request.To!.Trim(),
-            Subject = "AcademyFlow test email",
-            Body = "This is a test message from AcademyFlow. If you can read it, outgoing email is working.\n",
+            Subject = "Ojas test email",
+            Body = "This is a test message from Ojas. If you can read it, outgoing email is working.\n",
             Category = "Test"
         };
 

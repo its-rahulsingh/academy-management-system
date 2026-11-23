@@ -52,9 +52,9 @@ const PLATFORM_NAV: NavItem[] = [
     <div class="shell">
       <aside class="sidebar no-print">
         <div class="side-brand">
-          <app-brand-mark [name]="auth.tenant()?.name ?? 'AcademyFlow'" [logoUrl]="auth.tenant()?.logoUrl ?? null" />
+          <app-brand-mark [name]="auth.tenant()?.name ?? 'Ojas'" [logoUrl]="auth.tenant() ? (auth.tenant()?.logoUrl ?? null) : 'ojas-logo.svg'" />
           <div>
-            <strong>{{ auth.tenant()?.name ?? 'AcademyFlow' }}</strong>
+            <strong>{{ auth.tenant()?.name ?? 'Ojas' }}</strong>
             @if (auth.isOwner()) {
               <small>Platform console</small>
             } @else if (auth.tenant()?.tagline) {
@@ -85,7 +85,7 @@ const PLATFORM_NAV: NavItem[] = [
 
       <main class="main">
         <header class="mobile-top no-print">
-          <app-brand-mark [name]="auth.tenant()?.name ?? 'AcademyFlow'" [logoUrl]="auth.tenant()?.logoUrl ?? null" /><strong>{{ auth.tenant()?.name ?? 'AcademyFlow' }}</strong>
+          <app-brand-mark [name]="auth.tenant()?.name ?? 'Ojas'" [logoUrl]="auth.tenant() ? (auth.tenant()?.logoUrl ?? null) : 'ojas-logo.svg'" /><strong>{{ auth.tenant()?.name ?? 'Ojas' }}</strong>
           <button type="button" (click)="signOut()">Sign out</button>
         </header>
         <div class="page">
@@ -127,7 +127,7 @@ const PLATFORM_NAV: NavItem[] = [
               <router-outlet />
             }
           }
-          <footer class="no-print">AcademyFlow <span>•</span> Secure academy workspace</footer>
+          <footer class="no-print">Ojas <span>•</span> Secure academy workspace</footer>
         </div>
       </main>
     </div>

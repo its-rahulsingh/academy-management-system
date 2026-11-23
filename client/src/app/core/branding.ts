@@ -2,11 +2,11 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, effect, inject } from '@angular/core';
 import { AuthService } from './auth.service';
 
-const DEFAULT_TITLE = 'AcademyFlow';
+const DEFAULT_TITLE = 'Ojas';
 
 /**
  * Puts the signed-in academy's logo on the browser tab and its name in the tab title.
- * Signed out, or for the platform owner, the tab shows AcademyFlow's own icon.
+ * Signed out, or for the platform owner, the tab shows Ojas's own icon.
  */
 @Injectable({ providedIn: 'root' })
 export class BrandingService {

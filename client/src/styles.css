@@ -750,3 +750,4 @@ tr.clickable:hover td { background: #faf9ff; }
 @media (max-width: 900px) {
   .health-detail { grid-template-columns: 1fr; }
 }
+img.brand-mark.ojas-logo { background: none; border: 0; padding: 0; object-fit: contain; }

@@ -20,7 +20,7 @@ public sealed class EmailOptions
     public string Username { get; set; } = "";
     public string Password { get; set; } = "";
     public string FromAddress { get; set; } = "";
-    public string FromName { get; set; } = "AcademyFlow";
+    public string FromName { get; set; } = "Ojas";
     /// <summary>
     /// Brevo's API key. When set, mail goes through Brevo's web API over HTTPS instead of SMTP, which also works on hosts
     /// that block outgoing mail ports (such as Render's free plan). Host/Username/Password are then not needed.
@@ -290,7 +290,7 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
 public static class EmailTemplates
 {
     public static (string Subject, string Body) PasswordReset(string name, string link) => (
-        "Reset your AcademyFlow password",
+        "Reset your Ojas password",
         $"Hello {name},\n\nUse the link below to choose a new password. It works once and expires in 60 minutes.\n\n{link}\n\nIf you did not ask for this, you can ignore this email.\n");
 
     public static (string Subject, string Body) Welcome(
@@ -349,7 +349,7 @@ public static class EmailTemplates
         $"Dear {student},\n\nThis is a reminder that {pending} is outstanding towards your fee for {course} at {academy}.\n\nPlease arrange payment at the earliest. If you have already paid, kindly ignore this message.\n\nRegards,\n{academy}\n");
 
     public static (string Subject, string Body) InvoiceIssued(string academy, string number, string amount, DateOnly dueOn, DateOnly from, DateOnly to) => (
-        $"AcademyFlow invoice {number} for {academy}",
+        $"Ojas invoice {number} for {academy}",
         $"Hello,\n\nInvoice {number} for {amount} has been raised for {academy}.\nPeriod: {from:dd MMM yyyy} to {to:dd MMM yyyy}\nDue on: {dueOn:dd MMM yyyy}\n\nSign in and open Subscription to pay it.\n");
 
     public static (string Subject, string Body) InvoicePaid(string academy, string number, string amount, DateOnly paidThrough) => (

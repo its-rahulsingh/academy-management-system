@@ -146,7 +146,7 @@ public static class Startup
     public static void MapAcademyEndpoints(this WebApplication app)
     {
         app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", service = "academy-api", utcTime = DateTimeOffset.UtcNow }));
-        app.MapGet("/api/welcome", () => Results.Ok(new { application = "Academy ERP", message = "AcademyFlow API is running.", phase = "AcademyFlow" }));
+        app.MapGet("/api/welcome", () => Results.Ok(new { application = "Academy ERP", message = "Ojas API is running.", phase = "Ojas" }));
 
         app.MapAuthEndpoints();
         app.MapPlatformEndpoints();

@@ -189,7 +189,7 @@ export class StatusComponent {
   `,
 })
 export class BrandMarkComponent {
-  readonly name = input('AcademyFlow');
+  readonly name = input('Ojas');
   readonly logoUrl = input<string | null>(null);
   protected readonly failed = signal(false);
   protected readonly letter = computed(() => (this.name().trim()[0] ?? 'A').toUpperCase());

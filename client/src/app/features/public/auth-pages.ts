@@ -14,12 +14,12 @@ const MIN_PASSWORD = 5;
   template: `
     <div class="login-page">
       <div class="login-intro">
-        <a class="logo-line" routerLink="/"><span class="brand-mark">A</span><strong>AcademyFlow</strong></a>
+        <a class="logo-line" routerLink="/"><img class="brand-mark ojas-logo" src="ojas-logo.svg" alt="Ojas logo" /><strong>Ojas</strong></a>
         <h1>Run your academy<br /><span>with clarity.</span></h1>
         <p>Manage students, fee collection, faculty payouts and expenses from one connected workspace.</p>
       </div>
       <form class="login-card" (ngSubmit)="submit()">
-        <div class="mobile-logo"><span class="brand-mark">A</span> AcademyFlow</div>
+        <div class="mobile-logo"><img class="brand-mark ojas-logo" src="ojas-logo.svg" alt="Ojas logo" /> Ojas</div>
         @if (academy(); as a) {
           <div class="login-academy">
             <app-brand-mark [name]="a.name" [logoUrl]="a.logoUrl" />

@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
   template: `
     <div class="marketing">
       <header class="marketing-header">
-        <div class="logo-line"><span class="brand-mark">A</span><strong>AcademyFlow</strong></div>
+        <div class="logo-line"><img class="brand-mark ojas-logo" src="ojas-logo.svg" alt="Ojas logo" /><strong>Ojas</strong></div>
         <nav>
           <a routerLink="/" fragment="features">Features</a>
           <a routerLink="/" fragment="platform">Platform</a>
@@ -24,11 +24,11 @@ import { RouterLink } from '@angular/router';
           Track student fees, faculty payouts and expenses from one workspace. Replace scattered spreadsheets with
           figures you can trust.
         </p>
-        <a class="primary" routerLink="/login">Sign in to AcademyFlow →</a>
+        <a class="primary" routerLink="/login">Sign in to Ojas →</a>
         <a class="secondary explore" routerLink="/" fragment="features">Explore the product</a>
 
         <div class="marketing-window">
-          <div class="window-dots">● ● ● <span>AcademyFlow — dashboard preview</span></div>
+          <div class="window-dots">● ● ● <span>Ojas — dashboard preview</span></div>
           <h3>Financial overview</h3>
           <p>Academy performance at a glance</p>
           <div class="fake-metrics">
@@ -81,7 +81,7 @@ import { RouterLink } from '@angular/router';
         </div>
       </section>
 
-      <footer>AcademyFlow · Your academy, one source of truth.</footer>
+      <footer>Ojas · Your academy, one source of truth.</footer>
     </div>
   `,
 })
