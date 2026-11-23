@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Security.Cryptography;
 using Academy.Api.Data;
 using Academy.Api.Domain;
@@ -8,6 +8,8 @@ using Academy.Api.Infrastructure.Tenancy;
 using Academy.Api.Infrastructure.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+
+using Academy.Api.Infrastructure;
 
 namespace Academy.Api.Features;
 
@@ -573,11 +575,9 @@ public static class AttendanceEndpoints
 /// </summary>
 public sealed class ClassWatchService(IServiceScopeFactory scopes, ILogger<ClassWatchService> logger) : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
-
+    /// <summary>Runs at start-up (closing anything left from a night the server slept through), then on the quarter hour.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(Interval);
         do
         {
             try
@@ -591,8 +591,9 @@ public sealed class ClassWatchService(IServiceScopeFactory scopes, ILogger<Class
             {
                 logger.LogError(ex, "Checking running classes failed");
             }
+            await Task.Delay(QuietSchedule.UntilNext(QuietSchedule.Slot, DateTime.UtcNow), stoppingToken);
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
+        while (!stoppingToken.IsCancellationRequested);
     }
 
     public sealed record Result(int Reminded, int Closed);

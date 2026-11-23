@@ -58,6 +58,30 @@ public sealed class UnitTests
         Assert.Same(platform, EmailSender.Choose(null, "PasswordReset", academies, platform));
     }
 
+    [Theory]
+    [InlineData("2026-11-24T10:00:00", 15, 15 * 60)]   // exactly on a slot: the next one, never zero
+    [InlineData("2026-11-24T10:07:30", 15, 7 * 60 + 30)]
+    [InlineData("2026-11-24T10:59:59", 15, 1)]
+    [InlineData("2026-11-24T10:20:00", 60, 40 * 60)]   // hourly jobs land on the hour, with a quarter-hour slot
+    public void Background_checks_wait_for_the_next_shared_slot(string now, int everyMinutes, int expectedSeconds)
+    {
+        var utcNow = DateTime.SpecifyKind(DateTime.Parse(now, System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc);
+
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), Academy.Api.Infrastructure.QuietSchedule.UntilNext(TimeSpan.FromMinutes(everyMinutes), utcNow));
+    }
+
+    [Fact]
+    public async Task Queued_mail_wakes_the_sender_once_however_often_it_is_notified()
+    {
+        // Clear any signal another test left, then two notifications collapse into one wake-up.
+        await Academy.Api.Infrastructure.EmailWakeUp.WaitAsync(TimeSpan.Zero, CancellationToken.None);
+        Academy.Api.Infrastructure.EmailWakeUp.Notify();
+        Academy.Api.Infrastructure.EmailWakeUp.Notify();
+
+        Assert.True(await Academy.Api.Infrastructure.EmailWakeUp.WaitAsync(TimeSpan.Zero, CancellationToken.None));
+        Assert.False(await Academy.Api.Infrastructure.EmailWakeUp.WaitAsync(TimeSpan.Zero, CancellationToken.None));
+    }
+
     [Fact]
     public void Academy_without_a_subscription_has_no_access()
     {

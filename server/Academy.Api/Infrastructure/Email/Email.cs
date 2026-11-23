@@ -91,7 +91,8 @@ public sealed class AppOptions
 public sealed class EmailQueue(AcademyDbContext db)
 {
     /// <param name="html">The formatted content; when omitted it is made from the plain text.</param>
-    public void Enqueue(Guid? tenantId, string to, string subject, string body, string category, string? html = null) =>
+    public void Enqueue(Guid? tenantId, string to, string subject, string body, string category, string? html = null)
+    {
         db.EmailMessages.Add(new EmailMessage
         {
             TenantId = tenantId,
@@ -101,6 +102,12 @@ public sealed class EmailQueue(AcademyDbContext db)
             HtmlBody = html ?? EmailHtml.FromText(body),
             Category = category
         });
+        // Once the caller saves, wake the sender rather than leaving the mail for the next quarter-hour check.
+        db.SavedChanges -= WakeSender;
+        db.SavedChanges += WakeSender;
+    }
+
+    private static void WakeSender(object? sender, Microsoft.EntityFrameworkCore.SavedChangesEventArgs e) => EmailWakeUp.Notify();
 }
 
 public interface IEmailTransport
@@ -224,23 +231,45 @@ public sealed class EmailDispatchService(IServiceScopeFactory scopes, ILogger<Em
     private const int BatchSize = 20;
     private const int MaxAttempts = 5;
     public const string NotConfiguredError = "Not delivered: email is not configured, so the message was only written to the server log.";
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
-
+    /// <summary>
+    /// Sends the queue once at start-up (mail queued while the server slept), then whenever new mail is saved, and
+    /// otherwise only on the quarter hour (for retries), so an idle academy does not keep the database awake.
+    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(PollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        var woken = false;
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await using var scope = scopes.CreateAsyncScope();
-                await DispatchBatchAsync(scope.ServiceProvider, stoppingToken);
+                // The request that queued the mail may still be finishing its transaction; give it a moment.
+                if (woken) await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                var sent = await DrainAsync(stoppingToken);
+                if (woken && sent == 0)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                    await DrainAsync(stoppingToken);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Email dispatch failed");
             }
+            woken = await EmailWakeUp.WaitAsync(QuietSchedule.UntilNext(QuietSchedule.Slot, DateTime.UtcNow), stoppingToken);
         }
+    }
+
+    /// <summary>Sends batches until the queue has nothing due. Returns how many messages were handled.</summary>
+    private async Task<int> DrainAsync(CancellationToken ct)
+    {
+        int total = 0, handled;
+        do
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            handled = await DispatchBatchAsync(scope.ServiceProvider, ct);
+            total += handled;
+        } while (handled == BatchSize);
+        return total;
     }
 
     public static async Task<int> DispatchBatchAsync(IServiceProvider services, CancellationToken ct)

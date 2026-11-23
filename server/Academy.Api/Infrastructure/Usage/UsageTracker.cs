@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Claims;
 using Academy.Api.Data;
@@ -126,12 +126,13 @@ public sealed class UsageTracker
     }
 
     /// <summary>Adds what was collected since the last flush to the hourly rows.</summary>
-    public async Task FlushAsync(AcademyDbContext db, CancellationToken ct)
+    /// <summary>Saves the counts gathered since the last flush. Returns false (without touching the database) when there were none.</summary>
+    public async Task<bool> FlushAsync(AcademyDbContext db, CancellationToken ct)
     {
         var counters = Interlocked.Exchange(ref _counters, new());
         var users = Interlocked.Exchange(ref _users, new());
         var minutes = Interlocked.Exchange(ref _minutes, new());
-        if (counters.IsEmpty && users.IsEmpty && minutes.IsEmpty) return;
+        if (counters.IsEmpty && users.IsEmpty && minutes.IsEmpty) return false;
 
         foreach (var (k, c) in counters)
         {
@@ -171,6 +172,7 @@ public sealed class UsageTracker
                     peak_per_minute = greatest(usage_peak_hours.peak_per_minute, excluded.peak_per_minute)
                 """, ct);
         }
+        return true;
     }
 }
 
@@ -222,14 +224,20 @@ public sealed class UsageFlushService(UsageTracker tracker, IServiceScopeFactory
         await FlushAsync(CancellationToken.None);
     }
 
+    /// <summary>When the database size was last recorded. It only changes when people use the app, so it is
+    /// recorded at most once an hour, and only in a minute that had activity (the database is awake then anyway).</summary>
+    private DateTime _lastSizeSnapshotUtc = DateTime.MinValue;
+
     private async Task FlushAsync(CancellationToken ct)
     {
         try
         {
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AcademyDbContext>();
-            await tracker.FlushAsync(db, ct);
+            if (!await tracker.FlushAsync(db, ct)) return;
+            if (DateTime.UtcNow - _lastSizeSnapshotUtc < TimeSpan.FromHours(1)) return;
             await UsageTracker.SnapshotDatabaseSizeAsync(db, ct);
+            _lastSizeSnapshotUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {

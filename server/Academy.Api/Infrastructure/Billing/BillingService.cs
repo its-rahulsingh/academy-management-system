@@ -210,10 +210,10 @@ public sealed class BillingCycleService(IServiceScopeFactory scopes, ILogger<Bil
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
+    /// <summary>Runs a minute after start-up, then on the hour, together with the other jobs' quarter-hour checks.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-        using var timer = new PeriodicTimer(Interval);
         do
         {
             try
@@ -228,6 +228,7 @@ public sealed class BillingCycleService(IServiceScopeFactory scopes, ILogger<Bil
             {
                 logger.LogError(ex, "Billing cycle failed");
             }
-        } while (await timer.WaitForNextTickAsync(stoppingToken));
+            await Task.Delay(QuietSchedule.UntilNext(Interval, DateTime.UtcNow), stoppingToken);
+        } while (!stoppingToken.IsCancellationRequested);
     }
 }
