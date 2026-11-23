@@ -20,6 +20,11 @@
   button:disabled { opacity: .5; cursor: default; }
   input[type=range] { width: 100%; }
   #status { font-size: 13px; font-weight: 700; color: var(--brand); min-height: 20px; }
+  /* ?embed=1: just the video, filling the frame, playing on a loop (used on the landing page) */
+  body.embed { background: #000; overflow: hidden; }
+  body.embed main { padding: 0; max-width: none; height: 100vh; display: grid; place-items: center; }
+  body.embed main > :not(canvas) { display: none; }
+  body.embed canvas { width: 100vw; height: 100vh; aspect-ratio: auto; object-fit: contain; border-radius: 0; box-shadow: none; }
 </style>
 </head>
 <body>
@@ -52,6 +57,8 @@ const CONFIG = {
 const W = 1080, H = 1920, FPS = 30;
 const C = { brand: '#5147df', brand2: '#6a5cf2', deep: '#16153a', deep2: '#2c2a5a', ink: '#1e2438', muted: '#7d8299',
   light: '#f6f7fc', line: '#e8e9f2', green: '#1fa971', red: '#e5484d', orange: '#f08a24', yellow: '#e8b100', amber: '#ffb547' };
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) document.body.classList.add('embed');
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -395,6 +402,7 @@ let playing = false, t0 = 0, cur = 0, onEnd = null;
 function frame() {
   if (!playing) return;
   cur = (performance.now() - t0) / 1000;
+  if (cur >= TOTAL && EMBED) { play(0); return; }
   if (cur >= TOTAL) { cur = TOTAL; playing = false; playBtn.textContent = '▶ Play'; draw(TOTAL); show(); if (onEnd) { const f = onEnd; onEnd = null; f(); } return; }
   draw(cur); show(); requestAnimationFrame(frame);
 }
@@ -430,7 +438,7 @@ recBtn.onclick = () => {
   cur = 0; play(0);
 };
 
-Promise.all([800, 700, 600].map(w => document.fonts.load(`${w} 40px Manrope`))).catch(() => {}).then(() => { draw(0); show(); });
+Promise.all([800, 700, 600].map(w => document.fonts.load(`${w} 40px Manrope`))).catch(() => {}).then(() => { draw(0); show(); if (EMBED) play(0); });
 draw(0);
 </script>
 </body>
