@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ojas Product Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #f1f2f8; --ink: #1e2438; --muted: #6b7088; --brand: #5147df; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Manrope, system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px 16px; }
+  canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: 16px; box-shadow: 0 20px 60px #1e243833; background: #000; display: block; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0 8px; }
+  h1 { font-size: 20px; margin: 0 auto 0 0; letter-spacing: -.03em; }
+  button { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; background: #e4e3fb; color: var(--brand); }
+  button.primary { background: var(--brand); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=range] { width: 100%; }
+  p { font-size: 14px; color: var(--muted); margin: 6px 0; }
+  #status { font-weight: 700; color: var(--brand); }
+  #chapters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  #chapters button { padding: 6px 10px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div class="bar">
+    <h1>Ojas — product tour</h1>
+    <button id="play" class="primary">▶ Play</button>
+    <button id="restart">↺ Restart</button>
+    <button id="record" class="primary">● Record &amp; download video</button>
+  </div>
+  <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+  <p><span id="time">0.0s</span> · <span id="status"></span></p>
+  <div id="chapters"></div>
+  <p>Recording plays the whole tour once in real time (about 2½ minutes) and downloads an MP4. Keep this tab visible until it finishes.</p>
+</main>
+<script>
+// ---- Edit these to change the closing offer ----------------------------------------------
+const CONFIG = {
+  academy: 'Sunrise Classes',
+  offer: '6 months free',
+  offerSmall: 'No card needed. We set everything up for you.',
+  contact: 'Book your free setup today',
+};
+// ------------------------------------------------------------------------------------------
+
+const W = 1920, H = 1080, FPS = 30;
+const C = { brand: '#5147df', brand2: '#6a5cf2', deep: '#16153a', deep2: '#2c2a5a', ink: '#1e2438', muted: '#7d8299',
+  light: '#eef0f8', line: '#e8e9f2', soft: '#f6f6fb', green: '#1fa971', red: '#e5484d', orange: '#f08a24', yellow: '#e8b100', amber: '#ffb547', lilac: '#efedff' };
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---------- drawing helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const back = x => { x = clamp(x); const s = 1.7; return 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2); };
+const prog = (lt, at, dur = 0.5) => ease((lt - at) / dur);
+const font = (size, weight = 700) => `${weight} ${size}px Manrope, "Segoe UI Emoji", sans-serif`;
+
+function text(str, x, y, o = {}) {
+  const { size = 24, weight = 700, color = C.ink, align = 'left', maxW = 0, lh = 1.22, spacing = 0 } = o;
+  ctx.save();
+  ctx.font = font(size, weight); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top'; ctx.letterSpacing = spacing + 'px';
+  let lines = [String(str)];
+  if (maxW) {
+    lines = []; let cur = '';
+    for (const w of String(str).split(' ')) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+    lines.push(cur);
+  }
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * size * lh));
+  ctx.restore();
+  return lines.length * size * lh;
+}
+function rr(x, y, w, h, r, fill, stroke, lw = 2) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+function shadow(blur = 40, color = '#1e243826', dy = 14) { ctx.shadowColor = color; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+function noShadow() { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; }
+function card(x, y, w, h, r = 18) { ctx.save(); shadow(30, '#1e24381c', 8); rr(x, y, w, h, r, '#fff'); ctx.restore(); rr(x, y, w, h, r, null, C.line, 1.5); }
+function enter(lt, at, fn, dist = 30, dur = 0.5) {
+  const p = prog(lt, at, dur); if (p <= 0) return;
+  ctx.save(); ctx.globalAlpha *= p; ctx.translate(0, (1 - p) * dist); fn(p); ctx.restore();
+}
+function pop(lt, at, cx, cy, fn, dur = 0.5) {
+  const p = clamp((lt - at) / dur); if (p <= 0) return;
+  const s = back(p); ctx.save(); ctx.globalAlpha *= clamp(p * 2); ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy); fn(); ctx.restore();
+}
+function chip(x, y, label, bg, fg, size = 16, align = 'left') {
+  ctx.save(); ctx.font = font(size, 800); const w = ctx.measureText(label).width + size * 1.4, h = size * 1.8; ctx.restore();
+  const left = align === 'right' ? x - w : x;
+  rr(left, y, w, h, h / 2, bg);
+  text(label, left + w / 2, y + size * 0.4, { size, weight: 800, color: fg, align: 'center' });
+  return w;
+}
+function btn(x, y, w, h, label, bg = C.brand, fg = '#fff', size = 18) {
+  rr(x, y, w, h, 10, bg); text(label, x + w / 2, y + (h - size) / 2 - 1, { size, weight: 800, color: fg, align: 'center' });
+}
+function field(x, y, w, label, value, caret) {
+  text(label, x, y, { size: 15, weight: 800, color: '#42465f' });
+  rr(x, y + 24, w, 48, 10, '#fff', '#dfe1ec', 1.5);
+  text(value + (caret ? '|' : ''), x + 14, y + 38, { size: 18, weight: 600 });
+}
+function avatar(x, y, r, initials, bg = C.lilac, fg = C.brand) {
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  text(initials, x, y - r * 0.45, { size: r * 0.85, weight: 800, color: fg, align: 'center' });
+}
+function logo(x, y, s) {
+  const k = s / 64; ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  const g = ctx.createLinearGradient(0, 0, 64, 64); g.addColorStop(0, '#6a5cf2'); g.addColorStop(1, '#4236c9');
+  rr(0, 0, 64, 64, 18, g);
+  ctx.beginPath(); ctx.arc(30, 35, 14.5, 0, Math.PI * 2); ctx.strokeStyle = '#fff'; ctx.lineWidth = 7.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(45.5, 18.5, 7.5, 0, Math.PI * 2); ctx.fillStyle = C.amber; ctx.fill(); ctx.strokeStyle = '#5246d8'; ctx.lineWidth = 3.5; ctx.stroke();
+  ctx.restore();
+}
+function academyMark(x, y, s) {
+  const g = ctx.createLinearGradient(x, y, x + s, y + s); g.addColorStop(0, '#ff9a3c'); g.addColorStop(1, '#f25c2a');
+  rr(x, y, s, s, s * 0.28, g);
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + s / 2, y + s * 0.62, s * 0.24, Math.PI, 0); ctx.fill();
+  ctx.fillRect(x + s * 0.2, y + s * 0.62, s * 0.6, s * 0.06);
+}
+function qr(x, y, s, seed) {
+  const n = 25, c = s / n; let r = seed * 7919 + 17;
+  const rnd = () => { r = (r * 16807) % 2147483647; return r / 2147483647; };
+  ctx.fillStyle = C.ink;
+  const inF = (i, j) => (i < 8 && j < 8) || (i > n - 9 && j < 8) || (i < 8 && j > n - 9);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (!inF(i, j) && rnd() > 0.52) ctx.fillRect(x + i * c, y + j * c, c + 0.5, c + 0.5);
+  for (const [fi, fj] of [[0, 0], [n - 7, 0], [0, n - 7]]) {
+    const fx = x + fi * c, fy = y + fj * c;
+    ctx.fillStyle = C.ink; ctx.fillRect(fx, fy, 7 * c, 7 * c); ctx.fillStyle = '#fff'; ctx.fillRect(fx + c, fy + c, 5 * c, 5 * c);
+    ctx.fillStyle = C.ink; ctx.fillRect(fx + 2 * c, fy + 2 * c, 3 * c, 3 * c);
+  }
+}
+const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const clock = secs => [Math.floor(secs / 3600), Math.floor(secs / 60) % 60, secs % 60].map(v => String(v).padStart(2, '0')).join(':');
+
+// A data table: cols = [[label, width, align]], rows = arrays of strings or {draw}
+function table(x, y, cols, rows, lt, at = 0.6, rowH = 58) {
+  let cx = x;
+  cols.forEach(([label, w, align]) => { text(label.toUpperCase(), align === 'right' ? cx + w - 10 : cx + 10, y, { size: 13, weight: 800, color: '#a0a4b8', align: align === 'right' ? 'right' : 'left', spacing: 1 }); cx += w; });
+  const total = cols.reduce((a, c) => a + c[1], 0);
+  ctx.fillStyle = C.line; ctx.fillRect(x, y + 28, total, 2);
+  rows.forEach((row, i) => enter(lt, at + i * 0.12, () => {
+    const ry = y + 34 + i * rowH; let rx = x;
+    row.forEach((cell, j) => {
+      const [, w, align] = cols[j];
+      if (typeof cell === 'function') cell(rx, ry, w, rowH);
+      else text(cell, align === 'right' ? rx + w - 10 : rx + 10, ry + rowH / 2 - 11, { size: 18, weight: j === 0 ? 800 : 600, color: j === 0 ? C.ink : '#4b5068', align: align === 'right' ? 'right' : 'left' });
+      rx += w;
+    });
+    ctx.fillStyle = C.line; ctx.fillRect(x, ry + rowH - 1, total, 1);
+  }, 16));
+}
+const chipCell = (label, bg, fg) => (x, y, w, h) => chip(x + 10, y + h / 2 - 15, label, bg, fg, 15);
+
+// ---------- frame: app window, phone, left column ----------
+const WX = 740, WY = 96, WW = 1110, WH = 890;          // app window
+const CX = WX + 260, CY = WY + 84, CW = WX + WW - 30 - CX; // content area
+const NAV = [['🏠', 'Dashboard'], ['🎓', 'Students'], ['📝', 'Admissions'], ['💰', 'Fees'], ['👩‍🏫', 'Faculty'], ['🧪', 'Tests'], ['🧾', 'Expenses'], ['📊', 'Reports'], ['🛡️', 'Activity log'], ['⚙️', 'Academy profile']];
+
+function appWindow(lt, active, content, page) {
+  enter(lt, 0.15, () => {
+    ctx.save(); shadow(80, '#1e243833', 30); rr(WX, WY, WW, WH, 22, '#fff'); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, 22); ctx.clip();
+    ctx.fillStyle = '#f4f4f9'; ctx.fillRect(WX, WY, WW, 46);
+    ['#ff6159', '#ffbd2e', '#28c941'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(WX + 26 + i * 22, WY + 23, 7, 0, Math.PI * 2); ctx.fill(); });
+    rr(WX + 380, WY + 10, 350, 26, 13, '#fff'); text(`🔒  ${CONFIG.academy} · Ojas`, WX + 555, WY + 15, { size: 14, weight: 700, color: C.muted, align: 'center' });
+    ctx.fillStyle = '#f8f8fc'; ctx.fillRect(WX + 230, WY + 46, WW - 230, WH - 46);
+    if (active !== null) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(WX, WY + 46, 230, WH - 46); ctx.fillStyle = C.line; ctx.fillRect(WX + 229, WY + 46, 1, WH - 46);
+      academyMark(WX + 20, WY + 70, 40);
+      text(CONFIG.academy, WX + 70, WY + 72, { size: 16, weight: 800 });
+      text('Super Admin', WX + 70, WY + 94, { size: 12, weight: 700, color: '#9ba2b6' });
+      NAV.forEach(([ico, label], i) => {
+        const ny = WY + 140 + i * 50, on = i === active;
+        if (on) rr(WX + 12, ny, 206, 40, 9, C.lilac);
+        text(ico, WX + 26, ny + 9, { size: 17 });
+        text(label, WX + 58, ny + 10, { size: 16, weight: 700, color: on ? C.brand : '#7b8193' });
+      });
+      text(page[0], CX, WY + 72, { size: 13, weight: 800, color: '#9699ad', spacing: 1 });
+      text(page[1], CX, WY + 92, { size: 30, weight: 800 });
+    } else {
+      ctx.fillStyle = '#f8f8fc'; ctx.fillRect(WX, WY + 46, WW, WH - 46);
+    }
+    ctx.restore();
+  }, 40, 0.6);
+  if (lt > 0.35) { ctx.save(); ctx.beginPath(); ctx.roundRect(WX, WY + 46, WW, WH - 46, [0, 0, 22, 22]); ctx.clip(); content(lt); ctx.restore(); }
+}
+
+function phone(x, y, w, h, draw) {
+  ctx.save(); shadow(70, '#0b0d2a44', 30); rr(x - 14, y - 14, w + 28, h + 28, 60, '#111322'); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 48); ctx.clip(); ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h); draw(); ctx.restore();
+  rr(x + w / 2 - 60, y + 14, 120, 28, 14, '#111322');
+}
+
+function leftColumn(lt, num, kicker, title, bullets) {
+  enter(lt, 0.1, () => text(`${String(num).padStart(2, '0')}  ·  ${kicker}`, 90, 210, { size: 22, weight: 800, color: C.brand, spacing: 3 }));
+  let th = 0;
+  enter(lt, 0.25, () => { th = text(title, 90, 250, { size: 62, weight: 800, maxW: 600, lh: 1.08 }); });
+  th = th || 70;
+  let by = 250 + th + 40;
+  bullets.forEach((b, i) => {
+    const y = by;
+    ctx.save(); ctx.font = font(26, 600);
+    const lines = Math.ceil(ctx.measureText(b).width / 540) || 1; ctx.restore();
+    enter(lt, 0.8 + i * 0.85, () => {
+      ctx.fillStyle = '#1fa97122'; ctx.beginPath(); ctx.arc(106, y + 16, 16, 0, Math.PI * 2); ctx.fill();
+      text('✓', 106, y + 4, { size: 20, weight: 800, color: C.green, align: 'center' });
+      text(b, 138, y, { size: 26, weight: 600, color: '#3c4159', maxW: 540, lh: 1.3 });
+    }, 20);
+    by += lines * 34 + 26;
+  });
+}
+
+function lightBg() {
+  ctx.fillStyle = C.light; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#5147df0d'; ctx.beginPath(); ctx.arc(1800, 80, 380, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1fa9710d'; ctx.beginPath(); ctx.arc(80, 1040, 360, 0, Math.PI * 2); ctx.fill();
+}
+function brandBg() {
+  const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#6a5cf2'); g.addColorStop(1, '#2f259e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff0d'; ctx.beginPath(); ctx.arc(1700, 180, 420, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(160, 980, 380, 0, Math.PI * 2); ctx.fill();
+}
+function statCard(x, y, w, h, label, value, color, lt, at) {
+  enter(lt, at, (p) => {
+    card(x, y, w, h);
+    text(label, x + 20, y + 20, { size: 15, weight: 700, color: C.muted });
+    const v = typeof value === 'number' ? (value > 999 ? inr(value * p) : String(Math.round(value * p))) : value;
+    text(v, x + 20, y + 50, { size: 30, weight: 800, color });
+  });
+}
+
+// ---------- scenes ----------
+function sIntro(lt) {
+  brandBg();
+  const glow = 0.25 + 0.1 * Math.sin(lt * 3);
+  const g = ctx.createRadialGradient(960, 420, 40, 960, 420, 420); g.addColorStop(0, `rgba(255,181,71,${glow})`); g.addColorStop(1, 'rgba(255,181,71,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  pop(lt, 0.1, 960, 400, () => { ctx.save(); shadow(60, '#0b0d2a66', 24); logo(860, 300, 200); ctx.restore(); }, 0.7);
+  enter(lt, 0.6, () => text('Ojas', 960, 540, { size: 150, weight: 800, color: '#fff', align: 'center', spacing: -3 }));
+  enter(lt, 1.0, () => text('Your whole academy. One app.', 960, 730, { size: 48, weight: 700, color: '#e6e3ff', align: 'center' }));
+  enter(lt, 1.6, () => text('PRODUCT TOUR', 960, 830, { size: 24, weight: 800, color: C.amber, align: 'center', spacing: 6 }));
+}
+
+function sSignIn(lt) {
+  lightBg();
+  leftColumn(lt, 1, 'SIGN-IN & ROLES', 'Every person gets the right access.', [
+    'Each academy signs in with its own academy code',
+    'Super Admin, Admin, Accountant and Staff roles',
+    'Faculty and students get their own portals',
+    'Five wrong passwords lock an account for 15 minutes']);
+  appWindow(lt, null, () => {
+    enter(lt, 0.5, () => {
+      card(WX + 70, WY + 120, 440, 640, 22);
+      academyMark(WX + 250, WY + 160, 80);
+      text(CONFIG.academy, WX + 290, WY + 260, { size: 26, weight: 800, align: 'center' });
+      text('Sign in to continue', WX + 290, WY + 296, { size: 16, weight: 600, color: C.muted, align: 'center' });
+      const typed = (s, at, d) => s.slice(0, Math.floor(clamp((lt - at) / d) * s.length));
+      field(WX + 110, WY + 340, 360, 'Academy code', typed('SUNRISE', 1.0, 0.6), lt > 1 && lt < 1.6);
+      field(WX + 110, WY + 430, 360, 'Email', typed('admin@sunrise.in', 1.7, 0.8), lt > 1.7 && lt < 2.5);
+      field(WX + 110, WY + 520, 360, 'Password', '•'.repeat(Math.floor(clamp((lt - 2.6) / 0.5) * 9)), false);
+      btn(WX + 110, WY + 620, 360, 56, lt > 3.4 ? 'Signed in ✓' : 'Sign in', lt > 3.4 ? C.green : C.brand, '#fff', 20);
+    });
+    const roles = [['Super Admin', 'Everything, including subscription and reports', C.brand],
+      ['Admin', 'Day-to-day running of the academy', '#3b82f6'], ['Accountant', 'Fees, refunds, expenses, payouts', C.green],
+      ['Staff', 'Students, admissions, fee collection', C.orange], ['Faculty', 'Own portal: clock in, sessions, pay', '#d946ef'],
+      ['Student', 'Own portal: subjects, results, report card', '#0ea5e9']];
+    roles.forEach(([r, d, col], i) => enter(lt, 1.2 + i * 0.3, () => {
+      const y = WY + 120 + i * 108; card(WX + 560, y, 500, 92, 16);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(WX + 600, y + 46, 14, 0, Math.PI * 2); ctx.fill();
+      text(r, WX + 630, y + 18, { size: 20, weight: 800 }); text(d, WX + 630, y + 50, { size: 15, weight: 600, color: C.muted });
+    }));
+  });
+}
+
+function sDashboard(lt) {
+  lightBg();
+  leftColumn(lt, 2, 'DASHBOARD', 'Your academy at a glance.', [
+    'Fees collected, dues and expenses in one view',
+    'Classes running right now, with live timers',
+    'Switch academic year in one click']);
+  appWindow(lt, 0, () => {
+    enter(lt, 0.6, () => chip(CX + CW, WY + 96, '2026-27  ▾', C.lilac, C.brand, 15, 'right'));
+    const w = (CW - 60) / 4;
+    [['Fees collected', 482500, C.green], ['Fees due', 126000, C.red], ['Expenses', 96400, C.orange], ['Active students', 312, C.ink]]
+      .forEach(([l, v, c], i) => statCard(CX + i * (w + 20), CY + 70, w, 110, l, v, c, lt, 0.6 + i * 0.12));
+    enter(lt, 1.2, () => {
+      card(CX, CY + 205, 500, 360);
+      text('Fee collection by month', CX + 24, CY + 228, { size: 18, weight: 800 });
+      const vals = [42, 55, 48, 70, 64, 82, 76, 92], m = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
+      vals.forEach((v, i) => {
+        const p = prog(lt, 1.4 + i * 0.08, 0.7), bh = v * 2.6 * p, bx = CX + 34 + i * 57;
+        rr(bx, CY + 530 - bh, 36, bh, 6, i === 7 ? C.brand : '#c9c4fb');
+        text(m[i], bx + 18, CY + 538, { size: 13, weight: 700, color: C.muted, align: 'center' });
+      });
+    });
+    enter(lt, 1.5, () => {
+      card(CX + 520, CY + 205, CW - 520, 360);
+      text('Classes running now', CX + 544, CY + 228, { size: 18, weight: 800 });
+      [['Mr. Iyer', 'Physics · Class 11', 2400], ['Ms. Khan', 'Biology · Class 12', 1260], ['Mr. Rao', 'Maths · Class 9', 300]].forEach(([n, s, base], i) => {
+        const y = CY + 280 + i * 92;
+        ctx.fillStyle = C.green; ctx.beginPath(); ctx.arc(CX + 552, y + 22, 7, 0, Math.PI * 2); ctx.fill();
+        text(n, CX + 570, y, { size: 18, weight: 800 }); text(s, CX + 570, y + 28, { size: 14, weight: 600, color: C.muted });
+        text(clock(base + Math.floor(lt * 3)), CX + CW - 22, y + 6, { size: 22, weight: 800, color: C.brand, align: 'right' });
+      });
+    });
+    enter(lt, 1.9, () => {
+      card(CX, CY + 585, CW, 205);
+      text('Latest payments', CX + 24, CY + 606, { size: 18, weight: 800 });
+      [['Priya Patel', 'R-0142 · UPI', 8500], ['Aarav Sharma', 'R-0141 · Cash', 12000], ['Kabir Singh', 'R-0140 · Card', 9500]].forEach(([n, d, a], i) => {
+        const y = CY + 645 + i * 46; text(n, CX + 24, y, { size: 17, weight: 800 }); text(d, CX + 260, y, { size: 16, weight: 600, color: C.muted });
+        text(inr(a), CX + CW - 24, y, { size: 17, weight: 800, color: C.green, align: 'right' });
+      });
+    });
+  }, ['OVERVIEW', 'Dashboard']);
+}
+
+function sStudents(lt) {
+  lightBg();
+  leftColumn(lt, 3, 'STUDENTS & COURSES', 'Every student, every course, every year.', [
+    'Students organised by course and academic year',
+    'Subject master linked to courses, faculty and tests',
+    'Find anyone fast by course and academic year']);
+  appWindow(lt, 1, () => {
+    enter(lt, 0.6, () => {
+      rr(CX, CY + 70, 360, 46, 10, '#fff', '#dfe1ec', 1.5); text('🔍  Search students…', CX + 14, CY + 82, { size: 17, weight: 600, color: '#a0a4b8' });
+      chip(CX + 380, CY + 77, 'All courses ▾', '#fff', C.ink, 15); chip(CX + 530, CY + 77, '2026-27 ▾', C.lilac, C.brand, 15);
+      btn(CX + CW - 170, CY + 70, 170, 46, '+ Add student');
+    });
+    table(CX, CY + 150, [['Name', 220], ['Course', 200], ['Subjects', 240], ['Balance', 130, 'right']], [
+      ['Aarav Sharma', 'JEE · Class 12', chipCell('PHY · CHE · MAT', C.lilac, C.brand), '₹0'],
+      ['Priya Patel', 'NEET · Class 11', chipCell('PHY · CHE · BIO', C.lilac, C.brand), '₹8,500'],
+      ['Rohan Mehta', 'Foundation · 9', chipCell('MAT · SCI', C.lilac, C.brand), '₹6,000'],
+      ['Sneha Iyer', 'JEE · Class 11', chipCell('PHY · CHE · MAT', C.lilac, C.brand), '₹10,000'],
+      ['Kabir Singh', 'NEET · Class 12', chipCell('PHY · CHE · BIO', C.lilac, C.brand), '₹0'],
+      ['Ananya Verma', 'NEET · Class 11', chipCell('PHY · CHE · BIO', C.lilac, C.brand), '₹0'],
+      ['Ishaan Gupta', 'Foundation · 10', chipCell('MAT · SCI', C.lilac, C.brand), '₹4,500'],
+      ['Meera Nair', 'JEE · Class 12', chipCell('PHY · CHE · MAT', C.lilac, C.brand), '₹0'],
+    ], lt, 0.9, 64);
+  }, ['PEOPLE', 'Students']);
+}
+
+function sAdmissions(lt) {
+  lightBg();
+  leftColumn(lt, 4, 'ONLINE ADMISSIONS', 'Admissions from a QR code.', [
+    'A public form link and a printable QR code',
+    'Parents apply from their phone, no login needed',
+    'Applications wait for your approval',
+    'Spam protection built in']);
+  appWindow(lt, 2, () => {
+    enter(lt, 0.6, () => {
+      card(CX, CY + 70, 320, 450);
+      text('Your admission form', CX + 160, CY + 96, { size: 18, weight: 800, align: 'center' });
+      qr(CX + 50, CY + 140, 220, 5);
+      text('/apply/SUNRISE', CX + 160, CY + 380, { size: 17, weight: 700, color: C.brand, align: 'center' });
+      btn(CX + 30, CY + 430, 120, 44, 'Print', C.lilac, C.brand, 16); btn(CX + 170, CY + 430, 120, 44, 'Download', C.lilac, C.brand, 16);
+    });
+    text('Waiting for approval', CX + 350, CY + 74, { size: 18, weight: 800 });
+    [['Ananya Verma', 'NEET · Class 11 · 98XXX XX210'], ['Dev Malhotra', 'JEE · Class 11 · 97XXX XX451'], ['Riya Sen', 'Foundation · 9 · 99XXX XX118'], ['Arjun Das', 'JEE · Class 12 · 90XXX XX772']].forEach(([n, d], i) => enter(lt, 1.0 + i * 0.25, () => {
+      const y = CY + 110 + i * 118; card(CX + 350, y, CW - 350, 100, 16);
+      avatar(CX + 396, y + 50, 24, n.split(' ').map(s => s[0]).join(''));
+      text(n, CX + 434, y + 24, { size: 19, weight: 800 }); text(d, CX + 434, y + 54, { size: 14, weight: 600, color: C.muted });
+      if (i === 0 && lt > 4.2) chip(CX + CW - 20, y + 28, '✓ Approved', '#e3f6ee', C.green, 16, 'right');
+      else { btn(CX + CW - 220, y + 28, 96, 44, 'Approve', C.brand, '#fff', 16); btn(CX + CW - 114, y + 28, 90, 44, 'Reject', '#fdecec', C.red, 16); }
+    }));
+    enter(lt, 2.5, () => {
+      card(CX, CY + 600, CW, 180);
+      text('🛡️  Protected from spam', CX + 24, CY + 624, { size: 18, weight: 800 });
+      ['Rate limit per device', 'Hidden spam trap', 'Duplicate check by phone', 'Close the form anytime'].forEach((s, i) =>
+        chip(CX + 24 + (i % 2) * 380, CY + 668 + Math.floor(i / 2) * 50, s, C.soft, '#4b5068', 15));
+    });
+  }, ['PEOPLE', 'Online admissions']);
+}
+
+function sFees(lt) {
+  lightBg();
+  leftColumn(lt, 5, 'FEES & RECEIPTS', 'Collect fees without the chasing.', [
+    'Instalments, discounts, surcharges and refunds',
+    'Numbered, printable receipts — emailed to the student',
+    'Fee reminders sent by email',
+    'Settle balance to close the last instalment']);
+  appWindow(lt, 3, () => {
+    const paid = lt > 3.6;
+    enter(lt, 0.6, () => {
+      card(CX, CY + 70, CW, 150);
+      avatar(CX + 56, CY + 145, 34, 'PP');
+      text('Priya Patel', CX + 106, CY + 110, { size: 24, weight: 800 }); text('NEET · Class 11 · 2026-27', CX + 106, CY + 144, { size: 15, weight: 600, color: C.muted });
+      [['Agreed fee', inr(48000), C.ink], ['Paid', inr(paid ? 48000 : 39500), C.green], ['Due', inr(paid ? 0 : 8500), paid ? C.green : C.red]].forEach(([l, v, c], i) => {
+        text(l, CX + 400 + i * 140, CY + 104, { size: 14, weight: 700, color: C.muted }); text(v, CX + 400 + i * 140, CY + 130, { size: 24, weight: 800, color: c });
+      });
+    });
+    enter(lt, 1.2, () => {
+      card(CX, CY + 240, 400, 330);
+      text('Record payment', CX + 24, CY + 262, { size: 18, weight: 800 });
+      field(CX + 24, CY + 300, 352, 'Amount', lt > 1.8 ? '₹8,500' : '', lt > 1.5 && lt < 2.2);
+      field(CX + 24, CY + 390, 352, 'Mode', lt > 2.5 ? 'UPI' : '', false);
+      btn(CX + 24, CY + 494, 352, 52, paid ? 'Payment recorded ✓' : 'Record payment', paid ? C.green : C.brand);
+    });
+    enter(lt, 3.9, () => {
+      ctx.save(); ctx.translate(CX + 420, CY + 240);
+      card(0, 0, CW - 420, 330);
+      text('RECEIPT', 24, 22, { size: 14, weight: 800, color: '#a0a4b8', spacing: 2 }); text('R-0142', CW - 444, 20, { size: 18, weight: 800, color: C.brand, align: 'right' });
+      [['Student', 'Priya Patel'], ['Paid now', '₹8,500 · UPI'], ['Paid to date', '₹48,000'], ['Balance due', '₹0']].forEach(([a, b], i) => {
+        text(a, 24, 66 + i * 42, { size: 16, weight: 600, color: C.muted }); text(b, CW - 444, 66 + i * 42, { size: 16, weight: 800, align: 'right' });
+      });
+      rr(24, 250, CW - 468, 56, 12, '#e3f6ee'); text('✉️  Emailed to the student', 44, 266, { size: 17, weight: 800, color: '#137a52' });
+      ctx.restore();
+    }, 30);
+    enter(lt, 1.6, () => {
+      ['Discount', 'Surcharge', 'Refund', 'Settle balance', 'Send reminder'].forEach((b, i) => btn(CX + i * 164, CY + 600, 150, 48, b, i === 3 ? C.lilac : '#fff', C.brand, 16));
+      rr(CX, CY + 600, 0, 0, 0);
+      text('Mistakes are voided with a reason, never deleted — so totals always add up.', CX, CY + 690, { size: 17, weight: 700, color: C.muted, maxW: CW });
+    });
+  }, ['MONEY', 'Fees']);
+}
+
+function sFacultyPay(lt) {
+  lightBg();
+  leftColumn(lt, 6, 'FACULTY & PAY', 'Teacher pay, worked out for you.', [
+    'Pay each teacher a package or by the hour',
+    'Hourly pay = minutes × rate, to the paisa',
+    'Payouts can never exceed what is owed',
+    'Monthly attendance download in Excel']);
+  appWindow(lt, 4, () => {
+    table(CX, CY + 80, [['Faculty', 190], ['Pay type', 140], ['Rate', 170], ['This month', 150], ['Owed', 130, 'right']], [
+      ['Mr. Iyer', chipCell('Hourly', C.lilac, C.brand), '₹600 / hour', '21h 15m', '₹12,750'],
+      ['Ms. Khan', chipCell('Package', '#e3f6ee', C.green), '₹2,40,000 / yr', '19 days', '₹20,000'],
+      ['Mr. Rao', chipCell('Hourly', C.lilac, C.brand), '₹500 / hour', '14h 40m', '₹7,333'],
+      ['Ms. D\'Souza', chipCell('Package', '#e3f6ee', C.green), '₹1,80,000 / yr', '22 days', '₹15,000'],
+    ], lt, 0.7, 64);
+    enter(lt, 2.0, () => {
+      card(CX, CY + 410, CW, 170);
+      text('Class logged · Mr. Iyer · Physics', CX + 24, CY + 434, { size: 18, weight: 800 });
+      const parts = [['85 min', C.ink], ['×', C.muted], ['₹600', C.ink], ['÷ 60', C.muted], ['=', C.muted], ['₹850', C.green]];
+      let x = CX + 24;
+      parts.forEach(([s, c], i) => enter(lt, 2.3 + i * 0.2, () => { x += 0; text(s, CX + 24 + [0, 140, 190, 320, 440, 490][i], CY + 482, { size: 44, weight: 800, color: c }); }, 10));
+    });
+    enter(lt, 3.6, () => {
+      card(CX, CY + 600, CW, 170);
+      text('Payout · Mr. Iyer', CX + 24, CY + 624, { size: 18, weight: 800 });
+      text('Owed ₹12,750', CX + 24, CY + 664, { size: 22, weight: 800, color: C.ink });
+      rr(CX + 24, CY + 708, CW - 260, 16, 8, C.lilac); rr(CX + 24, CY + 708, (CW - 260) * prog(lt, 3.9, 1.2) * 0.8, 16, 8, C.brand);
+      btn(CX + CW - 214, CY + 664, 190, 52, 'Pay ₹10,200');
+    });
+  }, ['PEOPLE', 'Faculty']);
+}
+
+function sFacultyPortal(lt) {
+  lightBg();
+  leftColumn(lt, 7, 'FACULTY PORTAL', 'Attendance that can’t be faked.', [
+    'Teachers clock in by scanning a QR that changes every 20 seconds',
+    'No admin free? Clock in by location instead',
+    'Forgot to clock out? Alerts and a fix in one tap',
+    'Anything unusual waits for your approval']);
+  enter(lt, 0.3, () => {
+    card(800, 150, 420, 520, 26);
+    text('Class check-in', 1010, 180, { size: 22, weight: 800, align: 'center' });
+    qr(870, 230, 280, lt < 4 ? 9 : 21);
+    if (lt > 4 && lt < 4.3) { ctx.fillStyle = `rgba(81,71,223,${0.5 * (1 - (lt - 4) / 0.3)})`; ctx.fillRect(870, 230, 280, 280); }
+    const left = 20 - Math.floor(((lt * 5) % 20));
+    rr(870, 540, 280, 10, 5, C.line); rr(870, 540, 280 * left / 20, 10, 5, C.brand);
+    text(`New code in ${left}s`, 1010, 566, { size: 16, weight: 700, color: C.muted, align: 'center' });
+    text('Shown on the admin’s screen', 1010, 620, { size: 15, weight: 600, color: '#a0a4b8', align: 'center' });
+  }, 40);
+  enter(lt, 0.7, () => phone(1290, 120, 330, 640, () => {
+    const x = 1290, y = 120;
+    text('Good morning,', x + 28, y + 76, { size: 18, weight: 600, color: C.muted }); text('Mr. Iyer', x + 28, y + 100, { size: 28, weight: 800 });
+    rr(x + 20, y + 160, 290, 230, 24, C.deep2);
+    text(lt > 1.8 ? 'Physics · Class 11' : 'Ready for class', x + 165, y + 184, { size: 17, weight: 700, color: '#c7c6ec', align: 'center' });
+    text(clock(lt > 1.8 ? Math.floor((lt - 1.8) * 700) : 0), x + 165, y + 222, { size: 44, weight: 800, color: '#fff', align: 'center' });
+    btn(x + 45, y + 310, 240, 56, lt > 1.8 ? 'Clock out' : 'Clock in', lt > 1.8 ? C.red : C.green, '#fff', 20);
+    text('This month', x + 28, y + 420, { size: 16, weight: 800, color: C.muted });
+    [['Time taught', '21h 15m'], ['Days present', '18'], ['Earned', '₹12,750']].forEach(([a, b], i) => {
+      text(a, x + 28, y + 456 + i * 44, { size: 17, weight: 600, color: '#4b5068' }); text(b, x + 302, y + 456 + i * 44, { size: 17, weight: 800, align: 'right' });
+    });
+  }), 40);
+  enter(lt, 2.4, () => {
+    card(800, 800, 1050, 250, 22);
+    text('Waiting for approval', 830, 818, { size: 20, weight: 800 });
+    [['Ms. Khan · Biology', '📍 Location · 40 m away', C.orange], ['Mr. Rao · Maths', '✍️ Forgot to clock in · manual', C.yellow], ['Mr. Iyer · Physics', '⏰ Probably forgot to clock out', C.red]].forEach(([n, d, c], i) => enter(lt, 2.7 + i * 0.35, () => {
+      const y = 860 + i * 60;
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(842, y + 20, 8, 0, Math.PI * 2); ctx.fill();
+      text(n, 864, y + 8, { size: 18, weight: 800 }); text(d, 1150, y + 8, { size: 17, weight: 600, color: C.muted });
+      btn(1700, y, 120, 40, 'Approve', C.lilac, C.brand, 15);
+    }, 10));
+  });
+}
+
+function sStudentPortal(lt) {
+  lightBg();
+  leftColumn(lt, 8, 'STUDENT PORTAL', 'Parents and students stay in the loop.', [
+    'Course, subjects and who teaches them',
+    'Latest test results and the full report card',
+    'Receipts emailed for every payment',
+    'Nothing about money shown in the portal']);
+  enter(lt, 0.4, () => phone(860, 110, 400, 860, () => {
+    const x = 860, y = 110;
+    text('Hi, Ananya 👋', x + 30, y + 76, { size: 28, weight: 800 }); text('NEET · Class 11 · 2026-27', x + 30, y + 116, { size: 15, weight: 600, color: C.muted });
+    rr(x + 20, y + 160, 360, 160, 20, C.soft);
+    text('My subjects', x + 40, y + 178, { size: 16, weight: 800, color: C.brand });
+    [['Physics', 'Mr. Iyer'], ['Chemistry', 'Ms. Pillai'], ['Biology', 'Ms. Khan']].forEach(([s, t], i) => {
+      text(s, x + 40, y + 212 + i * 32, { size: 16, weight: 700 }); text(t, x + 360, y + 212 + i * 32, { size: 15, weight: 600, color: C.muted, align: 'right' });
+    });
+    rr(x + 20, y + 340, 360, 380, 20, C.lilac);
+    text('Report card · Term 1', x + 40, y + 360, { size: 18, weight: 800, color: C.brand });
+    [['Physics', 86], ['Chemistry', 78], ['Biology', 92], ['English', 81]].forEach(([s, v], i) => {
+      const yy = y + 410 + i * 72, p = prog(lt, 1.0 + i * 0.15, 0.8);
+      text(s, x + 40, yy, { size: 17, weight: 700 }); text(String(Math.round(v * p)), x + 360, yy, { size: 17, weight: 800, align: 'right' });
+      rr(x + 40, yy + 30, 320, 12, 6, '#dcd8fb'); rr(x + 40, yy + 30, 320 * v / 100 * p, 12, 6, i === 2 ? C.green : C.brand);
+    });
+    rr(x + 20, y + 740, 360, 70, 18, '#e3f6ee'); text('🏆 Latest: Biology test 46/50', x + 40, y + 762, { size: 17, weight: 800, color: '#137a52' });
+  }), 40);
+  enter(lt, 2.6, () => {
+    card(1340, 300, 500, 400, 22);
+    text('📧  Inbox', 1370, 326, { size: 16, weight: 800, color: C.muted });
+    text(`${CONFIG.academy} — Payment receipt R-0142`, 1370, 370, { size: 19, weight: 800, maxW: 440 });
+    ctx.fillStyle = C.line; ctx.fillRect(1370, 440, 440, 2);
+    [['Paid now', '₹8,500'], ['Paid to date', '₹48,000'], ['Balance due', '₹0']].forEach(([a, b], i) => {
+      text(a, 1370, 466 + i * 44, { size: 17, weight: 600, color: C.muted }); text(b, 1810, 466 + i * 44, { size: 17, weight: 800, align: 'right' });
+    });
+    text('Sent as your academy, with your name.', 1370, 620, { size: 16, weight: 600, color: C.muted });
+  });
+}
+
+function sTests(lt) {
+  lightBg();
+  leftColumn(lt, 9, 'TESTS & REPORT CARDS', 'Marks in, report cards out.', [
+    'Each test is set in a real subject',
+    'Enter marks for a whole batch in one grid',
+    'Report cards grouped by subject, across years']);
+  appWindow(lt, 5, () => {
+    enter(lt, 0.5, () => { chip(CX, CY + 76, 'Physics · Unit test 3', C.lilac, C.brand, 15); chip(CX + 220, CY + 76, 'Out of 50', C.soft, '#4b5068', 15); });
+    const marks = [46, 39, 42, 35, 48, 31];
+    table(CX, CY + 140, [['Student', 300], ['Marks', 160], ['Grade', 140], ['Rank', 120, 'right']],
+      ['Aarav Sharma', 'Priya Patel', 'Sneha Iyer', 'Meera Nair', 'Ananya Verma', 'Kabir Singh'].map((n, i) => [n,
+        (x, y, w, h) => { const typed = lt > 1.4 + i * 0.3; rr(x + 10, y + 10, 90, h - 20, 8, '#fff', typed ? C.brand : '#dfe1ec', 1.5); if (typed) text(String(marks[i]), x + 26, y + h / 2 - 11, { size: 18, weight: 800 }); },
+        lt > 1.4 + i * 0.3 ? (marks[i] >= 45 ? 'A+' : marks[i] >= 40 ? 'A' : marks[i] >= 35 ? 'B' : 'C') : '', lt > 3.6 ? '#' + ([46, 39, 42, 35, 48, 31].slice().sort((a, b) => b - a).indexOf(marks[i]) + 1) : '']), lt, 0.7, 60);
+    enter(lt, 3.8, () => {
+      card(CX, CY + 560, CW, 220);
+      text('Report card · Ananya Verma', CX + 24, CY + 582, { size: 18, weight: 800 });
+      [['Physics', 'A+'], ['Chemistry', 'A'], ['Biology', 'A+'], ['English', 'A']].forEach(([s, g], i) => {
+        const x = CX + 24 + i * 190; rr(x, CY + 630, 170, 120, 14, C.soft);
+        text(s, x + 18, CY + 648, { size: 16, weight: 700, color: C.muted }); text(g, x + 18, CY + 680, { size: 40, weight: 800, color: C.brand });
+      });
+    });
+  }, ['ACADEMICS', 'Tests']);
+}
+
+function sExpenses(lt) {
+  lightBg();
+  leftColumn(lt, 10, 'EXPENSES WITH PROOF', 'Every rupee spent, with a bill.', [
+    'Attach up to five bills or payment screenshots',
+    'Set a rule: proof required above ₹5,000',
+    'Removing a bill is flagged to the owner']);
+  appWindow(lt, 6, () => {
+    enter(lt, 0.5, () => { chip(CX, CY + 76, '📎 Proof required above ₹5,000', '#fff4e5', '#b45309', 15); btn(CX + CW - 180, CY + 68, 180, 46, '+ Add expense'); });
+    table(CX, CY + 140, [['Date', 120], ['Item', 280], ['Paid to', 180], ['Proof', 100], ['Amount', 120, 'right']], [
+      ['21 Nov', 'Lab equipment', 'Sci-Tech Supplies', chipCell('📎 2', '#e3f6ee', C.green), '₹12,400'],
+      ['20 Nov', 'Electricity bill', 'MSEDCL', chipCell('📎 1', '#e3f6ee', C.green), '₹8,920'],
+      ['18 Nov', 'Printer ink', 'Local store', chipCell('—', C.soft, C.muted), '₹1,150'],
+      ['15 Nov', 'Rent', 'Mr. Kulkarni', chipCell('📎 1', '#e3f6ee', C.green), '₹45,000'],
+      ['12 Nov', 'Snacks for event', 'Sweet Mart', chipCell('—', C.soft, C.muted), '₹2,300'],
+    ], lt, 0.7, 60);
+    enter(lt, 2.4, () => {
+      card(CX, CY + 530, CW, 250);
+      text('Bills · Lab equipment · ₹12,400', CX + 24, CY + 552, { size: 18, weight: 800 });
+      [0, 1].forEach(i => pop(lt, 2.8 + i * 0.4, CX + 104 + i * 200, CY + 680, () => {
+        const x = CX + 24 + i * 200, y = CY + 595;
+        ctx.save(); ctx.translate(x + 80, y + 85); ctx.rotate(i ? 0.04 : -0.04); ctx.translate(-(x + 80), -(y + 85));
+        rr(x, y, 160, 170, 10, '#fffdf7', '#e7e0cc', 1.5);
+        text(i ? 'UPI' : 'INVOICE', x + 16, y + 14, { size: 13, weight: 800, color: '#b45309' });
+        for (let k = 0; k < 5; k++) rr(x + 16, y + 44 + k * 20, 128 - (k % 2) * 40, 8, 4, '#e7e0cc');
+        text(i ? '₹4,400' : '₹8,000', x + 16, y + 140, { size: 16, weight: 800 });
+        ctx.restore();
+      }));
+      enter(lt, 3.8, () => {
+        rr(CX + 450, CY + 610, CW - 474, 150, 14, '#fdecec');
+        text('🟠 Flagged to owner', CX + 474, CY + 630, { size: 17, weight: 800, color: C.red });
+        text('Bill removed from “Snacks for event” by front desk', CX + 474, CY + 664, { size: 16, weight: 600, color: '#7f1d1d', maxW: CW - 520 });
+      });
+    });
+  }, ['MONEY', 'Expenses']);
+}
+
+function sReports(lt) {
+  lightBg();
+  leftColumn(lt, 11, 'REPORTS', 'Reports your CA will love.', [
+    'Money in and out by day, week or month',
+    'Every download is an Excel workbook',
+    'Daily activity report: what happened and who did it']);
+  appWindow(lt, 7, () => {
+    const mode = lt < 2.2 ? 0 : lt < 3.6 ? 1 : 2;
+    enter(lt, 0.5, () => {
+      rr(CX, CY + 70, 330, 46, 12, '#ececf6');
+      ['Day', 'Week', 'Month'].forEach((m, i) => { if (i === mode) rr(CX + 4 + i * 108, CY + 74, 106, 38, 10, '#fff'); text(m, CX + 57 + i * 108, CY + 83, { size: 16, weight: 800, color: i === mode ? C.brand : C.muted, align: 'center' }); });
+      btn(CX + CW - 200, CY + 70, 200, 46, '⬇  Excel', C.green);
+    });
+    enter(lt, 0.8, () => {
+      card(CX, CY + 140, CW, 330);
+      text('Money in vs money out', CX + 24, CY + 162, { size: 18, weight: 800 });
+      const n = [7, 6, 8][mode];
+      for (let i = 0; i < n; i++) {
+        const seed = (i + 1) * (mode + 3), a = 60 + (seed * 37) % 120, b = 30 + (seed * 53) % 80, gw = (CW - 60) / n, bx = CX + 30 + i * gw;
+        const p = prog(lt, [0.9, 2.2, 3.6][mode] + i * 0.04, 0.5);
+        rr(bx, CY + 440 - a * p, gw * 0.32, a * p, 5, C.green); rr(bx + gw * 0.36, CY + 440 - b * p, gw * 0.32, b * p, 5, '#f7b2b4');
+      }
+      chip(CX + CW - 24, CY + 160, '■ In   ■ Out', C.soft, '#4b5068', 14, 'right');
+    });
+    enter(lt, 1.6, () => {
+      card(CX, CY + 490, CW, 290);
+      text('Daily report · 22 Nov', CX + 24, CY + 512, { size: 18, weight: 800 });
+      [['9:12', 'Admission approved · Ananya Verma', 'Staff · Neha'], ['10:40', 'Fee payment ₹8,500 · R-0142', 'Accountant · Ravi'], ['12:05', 'Expense ₹12,400 · Lab equipment', 'Admin · Sunil'], ['16:30', 'Class approved · Mr. Iyer 85 min', 'Super Admin']].forEach(([t, e, who], i) => enter(lt, 1.9 + i * 0.3, () => {
+        const y = CY + 556 + i * 52; text(t, CX + 24, y, { size: 16, weight: 800, color: C.brand }); text(e, CX + 100, y, { size: 16, weight: 700 }); text(who, CX + CW - 24, y, { size: 15, weight: 600, color: C.muted, align: 'right' });
+      }, 10));
+    });
+  }, ['MONEY', 'Reports']);
+}
+
+function sActivity(lt) {
+  lightBg();
+  leftColumn(lt, 12, 'ACTIVITY LOG & ALERTS', 'Know when something looks off.', [
+    'Red, orange and yellow flags for risky actions',
+    'Busiest hours at a glance',
+    'Full history on every student, payment and expense',
+    'Money is never edited or deleted — only voided with a reason']);
+  appWindow(lt, 8, () => {
+    const w = (CW - 60) / 4;
+    [['Actions this week', 1284, C.ink], ['Active users', 9, C.ink], ['Money edits', 3, C.red], ['After-hours actions', 2, C.orange]]
+      .forEach(([l, v, c], i) => statCard(CX + i * (w + 20), CY + 70, w, 110, l, v, c, lt, 0.5 + i * 0.1));
+    enter(lt, 1.0, () => {
+      card(CX, CY + 200, 470, 580);
+      text('Needs attention', CX + 24, CY + 222, { size: 18, weight: 800 });
+      [[C.red, 'Agreed fee lowered', 'Rohan Mehta · by Staff'], [C.red, 'Payment cancelled · ₹6,000', 'by Accountant · reason given'], [C.orange, 'Staff working at 11:40 PM', 'front-desk account'],
+        [C.orange, 'Sign-in from a new network', 'admin@sunrise.in'], [C.yellow, '3 wrong passwords today', 'accounts@sunrise.in']].forEach(([c, t, s], i) => enter(lt, 1.3 + i * 0.3, () => {
+        const y = CY + 266 + i * 100; rr(CX + 20, y, 430, 86, 14, C.soft);
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(CX + 48, y + 43, 10, 0, Math.PI * 2); ctx.fill();
+        text(t, CX + 72, y + 18, { size: 17, weight: 800 }); text(s, CX + 72, y + 48, { size: 14, weight: 600, color: C.muted });
+      }, 10));
+    });
+    enter(lt, 1.4, () => {
+      const x0 = CX + 490, cw2 = CW - 490; card(x0, CY + 200, cw2, 580);
+      text('Busiest hours', x0 + 24, CY + 222, { size: 18, weight: 800 });
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cell = (cw2 - 90) / 12;
+      days.forEach((d, r) => {
+        text(d, x0 + 24, CY + 276 + r * 64, { size: 14, weight: 700, color: C.muted });
+        for (let h = 0; h < 12; h++) {
+          const v = Math.max(0, Math.sin((h - 2) / 3.2) * (r === 6 ? 0.3 : 1) + ((h * 7 + r * 3) % 5) / 12), p = prog(lt, 1.6 + (r + h) * 0.03, 0.4);
+          rr(x0 + 70 + h * cell, CY + 266 + r * 64, cell - 4, 54, 6, `rgba(81,71,223,${0.08 + 0.85 * clamp(v) * p})`);
+        }
+      });
+      text('8 AM', x0 + 70, CY + 718, { size: 13, weight: 700, color: C.muted }); text('8 PM', x0 + cw2 - 24, CY + 718, { size: 13, weight: 700, color: C.muted, align: 'right' });
+    });
+  }, ['CONTROL', 'Activity log']);
+}
+
+function sPromote(lt) {
+  lightBg();
+  leftColumn(lt, 13, 'PROMOTE TO NEXT YEAR', 'New academic year in minutes.', [
+    'Tick continuing students, set their new course and fee',
+    'Unpaid balances carry forward and stay collectable',
+    'Portal login and report card move with the student']);
+  appWindow(lt, 1, () => {
+    enter(lt, 0.5, () => {
+      chip(CX, CY + 76, '2026-27', C.soft, '#4b5068', 16); text('→', CX + 110, CY + 76, { size: 24, weight: 800, color: C.brand }); chip(CX + 150, CY + 76, '2027-28', C.lilac, C.brand, 16);
+    });
+    const rows = [['Rohan Mehta', 'Foundation · 9', 'Foundation · 10', '₹6,000 carried'], ['Ishaan Gupta', 'Foundation · 10', 'JEE · Class 11', '₹4,500 carried'],
+      ['Priya Patel', 'NEET · Class 11', 'NEET · Class 12', '—'], ['Sneha Iyer', 'JEE · Class 11', 'JEE · Class 12', '₹10,000 carried'], ['Ananya Verma', 'NEET · Class 11', 'NEET · Class 12', '—']];
+    table(CX, CY + 140, [['', 60], ['Student', 210], ['This year', 180], ['Next year', 180], ['Balance', 150, 'right']], rows.map((r, i) => [
+      (x, y, w, h) => { const on = lt > 1.4 + i * 0.3; rr(x + 16, y + h / 2 - 13, 26, 26, 7, on ? C.brand : '#fff', on ? C.brand : '#c9ccd9', 2); if (on) text('✓', x + 29, y + h / 2 - 11, { size: 18, weight: 800, color: '#fff', align: 'center' }); },
+      r[0], r[1], (x, y, w, h) => { rr(x + 8, y + 10, w - 16, h - 20, 8, '#fff', '#dfe1ec', 1.5); text(r[2] + ' ▾', x + 20, y + h / 2 - 10, { size: 16, weight: 700 }); }, r[3]]), lt, 0.8, 66);
+    enter(lt, 3.2, () => {
+      const done = lt > 4.6;
+      btn(CX, CY + 540, 300, 56, done ? '✓ 5 students promoted' : 'Promote 5 students', done ? C.green : C.brand, '#fff', 19);
+      text('Last year’s records stay for history, with all their payments.', CX + 320, CY + 557, { size: 16, weight: 600, color: C.muted });
+    });
+  }, ['PEOPLE', 'Promote to next year']);
+}
+
+function sBranding(lt) {
+  lightBg();
+  leftColumn(lt, 14, 'YOUR BRAND', 'It looks like your academy, not ours.', [
+    'Your logo on every screen and the admission form',
+    'Your tagline under your name',
+    'Emails and receipts sent as your academy']);
+  appWindow(lt, 9, () => {
+    enter(lt, 0.5, () => {
+      card(CX, CY + 70, 400, 420);
+      text('Logo', CX + 24, CY + 94, { size: 16, weight: 800, color: '#42465f' });
+      rr(CX + 24, CY + 124, 352, 190, 14, C.soft, '#c9ccd9', 2);
+      if (lt > 1.3) pop(lt, 1.3, CX + 200, CY + 219, () => academyMark(CX + 150, CY + 169, 100));
+      else text('Drop your logo here', CX + 200, CY + 208, { size: 16, weight: 700, color: C.muted, align: 'center' });
+      const tag = 'Where toppers are made';
+      field(CX + 24, CY + 340, 352, 'Tagline', tag.slice(0, Math.floor(clamp((lt - 1.9) / 1.0) * tag.length)), lt > 1.9 && lt < 3);
+      btn(CX + 24, CY + 428, 352, 46, lt > 3.3 ? 'Saved ✓' : 'Save', lt > 3.3 ? C.green : C.brand);
+    });
+    enter(lt, 3.4, () => {
+      card(CX + 430, CY + 70, CW - 430, 420);
+      text('Your admission form', CX + 454, CY + 94, { size: 14, weight: 800, color: '#a0a4b8', spacing: 1 });
+      academyMark(CX + 454, CY + 130, 64);
+      text(CONFIG.academy, CX + 534, CY + 136, { size: 24, weight: 800 }); text('Where toppers are made', CX + 534, CY + 170, { size: 16, weight: 600, color: C.muted });
+      field(CX + 454, CY + 230, CW - 478, 'Student name', '', false); field(CX + 454, CY + 316, CW - 478, 'Course', '', false);
+      text('Powered by Ojas', CX + 430 + (CW - 430) / 2, CY + 440, { size: 13, weight: 700, color: '#a0a4b8', align: 'center' });
+    });
+    enter(lt, 4.0, () => {
+      card(CX, CY + 520, CW, 150);
+      text('📧  From: ' + CONFIG.academy, CX + 24, CY + 546, { size: 18, weight: 800 });
+      text('Every receipt, reminder and login email goes out in your academy’s name.', CX + 24, CY + 590, { size: 17, weight: 600, color: C.muted, maxW: CW - 48 });
+    });
+  }, ['SETTINGS', 'Academy profile']);
+}
+
+function sCta(lt) {
+  brandBg();
+  const glow = 0.22 + 0.1 * Math.sin(lt * 3);
+  const g = ctx.createRadialGradient(960, 460, 60, 960, 460, 560); g.addColorStop(0, `rgba(255,181,71,${glow})`); g.addColorStop(1, 'rgba(255,181,71,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  enter(lt, 0.1, () => { logo(790, 150, 110); text('Ojas', 920, 162, { size: 80, weight: 800, color: '#fff' }); });
+  enter(lt, 0.4, () => text('Fees · Attendance · Admissions · Portals · Reports · Alerts', 960, 320, { size: 30, weight: 700, color: '#bdb7ff', align: 'center' }));
+  enter(lt, 0.7, () => text('Start with', 960, 400, { size: 48, weight: 700, color: '#e6e3ff', align: 'center' }));
+  pop(lt, 1.0, 960, 560, () => text(CONFIG.offer, 960, 470, { size: 150, weight: 800, color: C.amber, align: 'center' }), 0.6);
+  enter(lt, 1.5, () => text(CONFIG.offerSmall, 960, 680, { size: 38, weight: 600, color: '#e6e3ff', align: 'center' }));
+  enter(lt, 1.9, () => {
+    const s = 1 + 0.025 * Math.sin(lt * 5);
+    ctx.save(); ctx.translate(960, 830); ctx.scale(s, s); ctx.translate(-960, -830);
+    ctx.save(); shadow(40, '#0b0d2a55', 16); rr(560, 780, 800, 100, 50, '#fff'); ctx.restore();
+    text(CONFIG.contact, 960, 808, { size: 40, weight: 800, color: C.brand, align: 'center' });
+    ctx.restore();
+  });
+}
+
+const SCENES = [
+  ['Intro', sIntro, 4.5], ['Sign-in & roles', sSignIn, 8.5], ['Dashboard', sDashboard, 8], ['Students', sStudents, 8], ['Admissions', sAdmissions, 9],
+  ['Fees', sFees, 10], ['Faculty pay', sFacultyPay, 9], ['Faculty portal', sFacultyPortal, 10], ['Student portal', sStudentPortal, 9], ['Tests', sTests, 9],
+  ['Expenses', sExpenses, 9], ['Reports', sReports, 9], ['Activity log', sActivity, 10], ['Promote', sPromote, 9], ['Branding', sBranding, 9], ['Get started', sCta, 7],
+];
+const STARTS = []; let acc = 0; for (const s of SCENES) { STARTS.push(acc); acc += s[2]; }
+const TOTAL = acc, FADE = 0.45;
+
+function progressBar(t) {
+  ctx.fillStyle = '#00000014'; ctx.fillRect(0, H - 8, W, 8);
+  ctx.fillStyle = C.amber; ctx.fillRect(0, H - 8, W * t / TOTAL, 8);
+}
+
+function draw(t) {
+  t = clamp(t, 0, TOTAL - 0.001);
+  let i = STARTS.length - 1; while (STARTS[i] > t) i--;
+  const lt = t - STARTS[i];
+  ctx.save();
+  if (i > 0 && lt < FADE) { SCENES[i - 1][1](SCENES[i - 1][2]); ctx.globalAlpha = ease(lt / FADE); }
+  SCENES[i][1](lt);
+  ctx.restore(); noShadow();
+  progressBar(t);
+}
+
+// ---------- playback & recording ----------
+const playBtn = document.getElementById('play'), restartBtn = document.getElementById('restart'), recBtn = document.getElementById('record');
+const scrub = document.getElementById('scrub'), timeEl = document.getElementById('time'), statusEl = document.getElementById('status');
+let playing = false, t0 = 0, cur = 0, onEnd = null;
+const chapters = document.getElementById('chapters');
+SCENES.forEach(([name], i) => { const b = document.createElement('button'); b.textContent = name; b.onclick = () => { cur = STARTS[i] + FADE; if (playing) play(cur); else { draw(cur + 3); cur += 3; show(); } }; chapters.appendChild(b); });
+
+function frame() {
+  if (!playing) return;
+  cur = (performance.now() - t0) / 1000;
+  if (cur >= TOTAL) { cur = TOTAL; playing = false; playBtn.textContent = '▶ Play'; draw(TOTAL); show(); if (onEnd) { const f = onEnd; onEnd = null; f(); } return; }
+  draw(cur); show(); requestAnimationFrame(frame);
+}
+function show() { scrub.value = Math.round(cur / TOTAL * 1000); timeEl.textContent = `${cur.toFixed(1)}s / ${TOTAL.toFixed(0)}s`; }
+function play(from = cur) { if (from >= TOTAL) from = 0; t0 = performance.now() - from * 1000; playing = true; playBtn.textContent = '❚❚ Pause'; requestAnimationFrame(frame); }
+function pause() { playing = false; playBtn.textContent = '▶ Play'; }
+playBtn.onclick = () => playing ? pause() : play();
+restartBtn.onclick = () => { cur = 0; play(0); };
+scrub.oninput = () => { pause(); cur = scrub.value / 1000 * TOTAL; draw(cur); show(); };
+
+recBtn.onclick = () => {
+  const types = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  const type = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  if (!type) { statusEl.textContent = 'This browser cannot record video. Use a recent Chrome or Edge.'; return; }
+  const rec = new MediaRecorder(canvas.captureStream(FPS), { mimeType: type, videoBitsPerSecond: 12_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => {
+    const ext = type.includes('mp4') ? 'mp4' : 'webm', blob = new Blob(chunks, { type: type.split(';')[0] });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ojas-product-tour.${ext}`; a.click();
+    statusEl.textContent = `Saved ojas-product-tour.${ext} (${(blob.size / 1e6).toFixed(1)} MB).` + (ext === 'webm' ? ' This browser made WebM; convert to MP4 for WhatsApp.' : '');
+    [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = false);
+  };
+  [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = true);
+  statusEl.textContent = 'Recording… keep this tab visible.';
+  draw(0); rec.start(500);
+  onEnd = () => setTimeout(() => rec.stop(), 400);
+  cur = 0; play(0);
+};
+
+Promise.all([800, 700, 600].map(w => document.fonts.load(`${w} 40px Manrope`))).catch(() => {}).then(() => { draw(0); show(); });
+draw(0); show();
+</script>
+</body>
+</html>
