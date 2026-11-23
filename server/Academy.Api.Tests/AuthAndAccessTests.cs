@@ -181,6 +181,18 @@ public sealed class AuthAndAccessTests(AppFactory factory)
     }
 
     [Fact]
+    public async Task Only_the_marketing_videos_can_be_framed_and_only_by_our_own_site()
+    {
+        var browser = factory.NewBrowser();
+
+        var video = await browser.GetAsync("/media/ojas-demo.html?embed=1");
+        var api = await browser.GetAsync("/api/health");
+
+        Assert.Equal("SAMEORIGIN", video.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("DENY", api.Headers.GetValues("X-Frame-Options").Single());
+    }
+
+    [Fact]
     public async Task Without_smtp_settings_queued_email_is_reported_as_not_delivered()
     {
         var academy = await factory.NewAcademyAsync();

@@ -734,8 +734,11 @@ function sCta(lt) {
   enter(lt, 1.9, () => {
     const s = 1 + 0.025 * Math.sin(lt * 5);
     ctx.save(); ctx.translate(960, 830); ctx.scale(s, s); ctx.translate(-960, -830);
-    ctx.save(); shadow(40, '#0b0d2a55', 16); rr(560, 780, 800, 100, 50, '#fff'); ctx.restore();
-    text(CONFIG.contact, 960, 808, { size: 40, weight: 800, color: C.brand, align: 'center' });
+    // The button grows with the contact line (up to most of the frame) and the text shrinks if it is still too long.
+    ctx.save(); ctx.font = font(40, 800); const tw = ctx.measureText(CONFIG.contact).width; ctx.restore();
+    const size = tw > 1560 ? Math.floor(40 * 1560 / tw) : 40, bw = Math.max(800, Math.min(1680, tw * size / 40 + 120));
+    ctx.save(); shadow(40, '#0b0d2a55', 16); rr(960 - bw / 2, 780, bw, 100, 50, '#fff'); ctx.restore();
+    text(CONFIG.contact, 960, 830 - size * 0.55, { size, weight: 800, color: C.brand, align: 'center' });
     ctx.restore();
   });
 }

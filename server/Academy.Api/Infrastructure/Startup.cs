@@ -127,7 +127,9 @@ public static class Startup
         app.Use(async (context, next) =>
         {
             context.Response.Headers.XContentTypeOptions = "nosniff";
-            context.Response.Headers.XFrameOptions = "DENY";
+            // Nothing may be framed by another site. The marketing videos in /media are framed by our own landing page,
+            // so they allow the same origin; every other page (the app itself) cannot be framed at all.
+            context.Response.Headers.XFrameOptions = context.Request.Path.StartsWithSegments("/media") ? "SAMEORIGIN" : "DENY";
             context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
             await next();
         });
