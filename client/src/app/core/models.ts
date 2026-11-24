@@ -768,6 +768,10 @@ export interface Plan {
   maxReceiptEmailsPerMonth: number | null;
   customBranding: boolean;
   isActive: boolean;
+  /** Listed on the website's price list. */
+  showOnWebsite: boolean;
+  /** Marked "Most popular" on the website. */
+  highlighted: boolean;
   subscribers: number;
 }
 
@@ -838,6 +842,26 @@ export interface EmailStatus {
   sent: number;
   failed: number;
   recentProblems: { toAddress: string; subject: string; category: string; status: string; attempts: number; lastError: string; createdAtUtc: string }[];
+}
+
+// ---- Public price list ----
+
+/** A plan as the website shows it: a monthly plan with its yearly option folded in. */
+export interface PublicPlan {
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  interval: BillingInterval;
+  yearlyPrice: number | null;
+  monthsFree: number;
+  maxStudents: number | null;
+  maxFaculty: number | null;
+  maxUsers: number | null;
+  maxReceiptEmailsPerMonth: number | null;
+  customBranding: boolean;
+  highlighted: boolean;
 }
 
 // ---- Activity dashboard ----

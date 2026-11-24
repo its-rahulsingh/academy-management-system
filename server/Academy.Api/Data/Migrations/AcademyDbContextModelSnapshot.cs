@@ -1364,6 +1364,10 @@ namespace Academy.Api.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<bool>("Highlighted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("highlighted");
+
                     b.Property<string>("Interval")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1400,6 +1404,10 @@ namespace Academy.Api.Data.Migrations
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
                         .HasColumnName("price");
+
+                    b.Property<bool>("ShowOnWebsite")
+                        .HasColumnType("boolean")
+                        .HasColumnName("show_on_website");
 
                     b.HasKey("Id")
                         .HasName("pk_plans");

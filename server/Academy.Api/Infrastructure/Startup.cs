@@ -170,6 +170,7 @@ public static class Startup
         app.MapEmailAdminEndpoints();
         app.MapBillingEndpoints();
         app.MapPublicBrandingEndpoints();
+        app.MapPublicPlanEndpoints();
         app.MapPublicAdmissionEndpoints();
 
         // Everything an academy does with its own data sits behind one gate: signed in, belongs to an

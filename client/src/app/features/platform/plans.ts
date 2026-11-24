@@ -33,6 +33,7 @@ import { UI } from '../../shared/ui';
             {{ plan.maxReceiptEmailsPerMonth === null ? 'Unlimited' : plan.maxReceiptEmailsPerMonth }} emailed receipts a month ·
             {{ plan.customBranding ? 'Own logo' : 'Ojas branding' }}
           </p>
+          <p class="muted small">{{ plan.showOnWebsite && plan.isActive ? '🌐 On the website' : 'Not on the website' }}{{ plan.highlighted ? ' · ★ Most popular' : '' }}</p>
           <div class="course-bottom">
             <div><strong>{{ plan.maxStudents ?? '∞' }}</strong><small>STUDENTS</small></div>
             <div><strong>{{ plan.maxFaculty ?? '∞' }}</strong><small>FACULTY</small></div>
@@ -75,6 +76,9 @@ import { UI } from '../../shared/ui';
         </div>
         <label class="check"><input type="checkbox" [(ngModel)]="model.customBranding" /> Academy's own logo (hides "Powered by Ojas")</label>
         <label class="check"><input type="checkbox" [(ngModel)]="model.isActive" /> Available for new academies</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="model.showOnWebsite" /> Show on the website's price list</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="model.highlighted" /> Mark as "Most popular" on the website</label>
+        <div class="helper">The website lists active plans with "show on website" ticked, cheapest first, and updates within five minutes of a change. A yearly plan whose code is the monthly plan's code plus "-yearly" (basic → basic-yearly) appears as that plan's yearly price.</div>
         <div class="helper">
           Limit changes apply right away to every academy on this plan; nothing is ever deleted, academies over a new limit just cannot add more.
           Price changes affect new academies only; existing subscriptions keep their price until you change it on the academy.
@@ -104,14 +108,15 @@ export class PlansComponent {
     return {
       id: '', code: '', name: '', description: '', price: 0, interval: 'Monthly' as BillingInterval,
       maxStudents: null as number | null, maxUsers: null as number | null, maxFaculty: null as number | null,
-      maxReceiptEmailsPerMonth: null as number | null, customBranding: true, isActive: true,
+      maxReceiptEmailsPerMonth: null as number | null, customBranding: true, isActive: true, showOnWebsite: true, highlighted: false,
     };
   }
 
   protected open(plan?: Plan): void {
     this.model = plan
       ? { id: plan.id, code: plan.code, name: plan.name, description: plan.description, price: plan.price, interval: plan.interval, maxStudents: plan.maxStudents, maxUsers: plan.maxUsers,
-          maxFaculty: plan.maxFaculty, maxReceiptEmailsPerMonth: plan.maxReceiptEmailsPerMonth, customBranding: plan.customBranding, isActive: plan.isActive }
+          maxFaculty: plan.maxFaculty, maxReceiptEmailsPerMonth: plan.maxReceiptEmailsPerMonth, customBranding: plan.customBranding, isActive: plan.isActive,
+          showOnWebsite: plan.showOnWebsite, highlighted: plan.highlighted }
       : this.blank();
     this.form.show();
   }

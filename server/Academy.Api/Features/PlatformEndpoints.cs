@@ -20,7 +20,8 @@ public static partial class PlatformEndpoints
     public sealed record PlanRequest(
         string? Code, string? Name, string? Description, decimal Price, BillingInterval Interval,
         int? MaxStudents, int? MaxUsers, bool IsActive = true,
-        int? MaxFaculty = null, int? MaxReceiptEmailsPerMonth = null, bool CustomBranding = true);
+        int? MaxFaculty = null, int? MaxReceiptEmailsPerMonth = null, bool CustomBranding = true,
+        bool ShowOnWebsite = true, bool Highlighted = false);
 
     public sealed record SuperAdminRequest(string? Name, string? Email, string? Password);
 
@@ -123,7 +124,7 @@ public static partial class PlatformEndpoints
             .Select(p => new
             {
                 p.Id, p.Code, p.Name, p.Description, p.Price, p.Currency, p.Interval, p.MaxStudents, p.MaxUsers, p.IsActive,
-                p.MaxFaculty, p.MaxReceiptEmailsPerMonth, p.CustomBranding,
+                p.MaxFaculty, p.MaxReceiptEmailsPerMonth, p.CustomBranding, p.ShowOnWebsite, p.Highlighted,
                 Subscribers = db.Subscriptions.Count(s => s.PlanId == p.Id && s.Status != SubscriptionStatus.Cancelled)
             })
             .ToListAsync(ct));
@@ -173,6 +174,8 @@ public static partial class PlatformEndpoints
         plan.MaxUsers = request.MaxUsers;
         plan.MaxFaculty = request.MaxFaculty;
         plan.MaxReceiptEmailsPerMonth = request.MaxReceiptEmailsPerMonth;
+        plan.ShowOnWebsite = request.ShowOnWebsite;
+        plan.Highlighted = request.Highlighted;
         plan.CustomBranding = request.CustomBranding;
         plan.IsActive = request.IsActive;
     }

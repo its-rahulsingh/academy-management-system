@@ -1,7 +1,42 @@
-import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { Api } from '../../core/api';
 import { CONTACT, whatsappLink } from '../../core/contact';
+import { PublicPlan } from '../../core/models';
+
+const INR = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+const money = (amount: number) => `₹${INR.format(amount)}`;
+const PER: Record<string, string> = { Monthly: '/month', Quarterly: '/quarter', Yearly: '/year' };
+const MONTHS: Record<string, number> = { Monthly: 1, Quarterly: 3, Yearly: 12 };
+
+function limit(value: number | null, one: string, many = one + 's'): string {
+  return value == null ? `unlimited ${many}` : `${value} ${value === 1 ? one : many}`;
+}
+
+function joinAnd(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** The bullet list on a price card, written from the plan's limits. */
+function features(p: PublicPlan): string[] {
+  const list = [
+    p.maxStudents == null ? 'Unlimited students' : `${p.maxStudents} students`,
+    p.maxFaculty == null ? 'Unlimited faculty' : `${p.maxFaculty} faculty`,
+    p.maxUsers == null ? 'Unlimited staff logins' : p.maxUsers === 1 ? '1 login (you)' : `${p.maxUsers} staff logins`,
+    p.maxReceiptEmailsPerMonth == null ? 'Unlimited emailed receipts' : `${p.maxReceiptEmailsPerMonth} emailed receipts a month`,
+    p.customBranding ? 'Your own logo' : '"Powered by Ojas" on forms',
+  ];
+  return list;
+}
+
+/** Questions whose answers do not depend on the price list. */
+const FIXED_FAQS: string[][] = [
+  ['Can you bring in our existing data?', 'Yes. Share your student and fee lists in Excel and we will help you load them, so you start with your real numbers.'],
+  ['Is our data private?', 'Every academy has its own workspace and only sees its own records. Inside your academy, each role sees only what it needs.'],
+  ['Can teachers fake attendance?', 'Not easily. QR codes change every 20 seconds and expire within a minute. Location check-ins and manual entries wait for your approval.'],
+  ['Do students see our fee details?', 'No. The student portal shows subjects, teachers, test results and report cards. Payment receipts go to the student by email.'],
+];
 
 /** "Start free" buttons open WhatsApp with a ready-made message. */
 const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my academy.');
@@ -37,7 +72,10 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
         <canvas class="orb" #orb aria-hidden="true"></canvas>
         <div class="aurora" aria-hidden="true"></div>
         <div class="hero-copy">
-          <span class="lp-pill rv"><i></i> Free for small classes · paid plans from ₹199</span>
+          @if (pricePill()) {
+            <span class="lp-pill rv in"><i></i> {{ pricePill() }}</span>
+          }
+          <p class="lp-tag rv in">Powering how Bharat learns</p>
           <h1 class="rv">The radiant way to <br class="br-d" /><span class="grad">run your academy.</span></h1>
           <p class="rv">
             Fees, faculty attendance, admissions, student portals and reports — one beautifully simple app,
@@ -267,11 +305,11 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
       <section class="sec" id="pricing">
         <div class="eyebrow rv">PRICING</div>
         <h2 class="rv">Start free. <span class="grad">Pay only as you grow.</span></h2>
-        <p class="lead rv">Every academy starts on Free and can stay there for as long as it likes. Upgrade only when you need more. No card needed.</p>
+        <p class="lead rv">{{ freePlan() ? 'Every academy starts on ' + freePlan()!.name + ' and can stay there for as long as it likes. Upgrade only when you need more. No card needed.' : 'Simple monthly plans. Upgrade only when you need more.' }}</p>
         <div class="prices">
-          @for (p of plans; track p.name; let i = $index) {
-            <div class="price tilt rv" [class.pop]="i === 1">
-              @if (i === 1) { <span class="badge">Most popular</span> }
+          @for (p of plans(); track p.name) {
+            <div class="price tilt rv in" [class.pop]="p.highlighted">
+              @if (p.highlighted) { <span class="badge">Most popular</span> }
               <small>{{ p.name }}</small>
               <h3>{{ p.price }}<span>{{ p.per }}</span></h3>
               <p>{{ p.forWho }}</p>
@@ -279,8 +317,10 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
               <ul class="pfeat">
                 @for (f of p.features; track f) { <li>{{ f }}</li> }
               </ul>
-              <button class="btn" [class.glow]="i === 1" [class.glass]="i !== 1" (click)="start()">{{ i === 0 ? 'Start free' : 'Choose ' + p.name }}</button>
+              <button class="btn" [class.glow]="p.highlighted" [class.glass]="!p.highlighted" (click)="start()">{{ p.free ? 'Start free' : 'Choose ' + p.name }}</button>
             </div>
+          } @empty {
+            <p class="lead">{{ plansFailed() ? 'Plans could not be loaded just now. Message us and we will share them.' : 'Loading plans…' }}</p>
           }
         </div>
         <ul class="includes rv">
@@ -293,7 +333,7 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
         <div class="eyebrow rv">QUESTIONS</div>
         <h2 class="rv">Good questions, straight answers.</h2>
         <div class="qa">
-          @for (q of faqs; track q[0]) {
+          @for (q of faqs(); track q[0]) {
             <details class="rv"><summary>{{ q[0] }}<i>+</i></summary><p>{{ q[1] }}</p></details>
           }
         </div>
@@ -320,7 +360,8 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
 
       <footer class="foot">
         <div class="brand"><img src="ojas-logo.svg" alt="" /><span>Ojas</span></div>
-        <p>Ojas — Sanskrit for vitality and radiance. The academy app for India.</p>
+        <p class="foot-tag">Powering how Bharat learns.</p>
+        <p>Ojas — Sanskrit for vitality and radiance.</p>
         <p class="foot-contact"><a [href]="contact.tel">{{ contact.phone }}</a> · <a [href]="'mailto:' + contact.email">{{ contact.email }}</a></p>
         <small>© {{ year }} Ojas · Figures in previews are illustrative.</small>
       </footer>
@@ -376,6 +417,8 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
     .hero-copy { position: relative; z-index: 2; max-width: 900px; margin: 0 auto; }
     .lp-pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #d9d5ff;
       background: #ffffff0a; border: 1px solid #ffffff1f; backdrop-filter: blur(8px); }
+    .lp-tag { margin: 24px 0 -4px; font-size: 13px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase;
+      background: linear-gradient(90deg, #c4bbff, #f5c26b); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .lp-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--am); box-shadow: 0 0 12px var(--am); animation: blink 2s infinite; }
     @keyframes blink { 50% { opacity: .35; } }
     h1 { font-size: clamp(44px, 7.4vw, 96px); line-height: .98; letter-spacing: -.055em; font-weight: 800; margin: 26px 0 22px; }
@@ -552,7 +595,7 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
     .contact span { font-size: 24px; } .contact small { display: block; font-size: 12px; color: var(--dim); font-weight: 700; } .contact b { font-size: 15px; word-break: break-all; }
     .foot-contact a { color: #b7adff; } .foot-contact a:hover { color: #fff; }
     .foot { border-top: 1px solid var(--line); padding: 40px 20px; text-align: center; color: #6f6d92; }
-    .foot .brand { justify-content: center; color: #fff; } .foot p { margin: 12px 0 6px; font-size: 14px; } .foot small { font-size: 12px; }
+    .foot .brand { justify-content: center; color: #fff; } .foot .foot-tag { color: #d9d5ff; font-weight: 700; letter-spacing: .04em; } .foot p { margin: 12px 0 6px; font-size: 14px; } .foot small { font-size: 12px; }
 
     /* modal */
     .tour-modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: #02010acc; backdrop-filter: blur(10px); animation: fade .25s; }
@@ -597,6 +640,7 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly zone = inject(NgZone);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly api = inject(Api);
 
   protected readonly contactUrl = CONTACT_URL;
   protected readonly contact = CONTACT;
@@ -634,25 +678,49 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
     ['🔒', 'Account lockout', 'Five wrong passwords lock an account for 15 minutes. New logins must set their own password.'],
     ['📱', 'Signed QR codes', 'Check-in codes are signed and expire in a minute, so a photo of one is useless later.'],
   ];
-  /** Mirrors the Free, Basic and Pro plans created by the FreemiumPlans migration. */
-  protected readonly plans = [
-    { name: 'Free', price: '₹0', per: '/forever', forWho: 'For small classes run by one teacher.', yearly: '',
-      features: ['25 students', '2 faculty', '1 login (you)', '50 emailed receipts a month', '"Powered by Ojas" on forms'] },
-    { name: 'Basic', price: '₹199', per: '/month', forWho: 'For growing classes.', yearly: 'or ₹1,999 a year — 2 months free',
-      features: ['75 students', '5 faculty', '2 staff logins', 'Unlimited emailed receipts', 'Your own logo'] },
-    { name: 'Pro', price: '₹499', per: '/month', forWho: 'For established academies.', yearly: 'or ₹4,999 a year — 2 months free',
-      features: ['250 students', '15 faculty', '5 staff logins', 'Unlimited emailed receipts', 'Your own logo'] },
-  ];
+  /** The price list, from the plans the owner manages (Platform → Plans), so the website never drifts from real prices. */
+  private readonly publicPlans = signal<PublicPlan[]>([]);
+  protected readonly plansFailed = signal(false);
+  protected readonly plans = computed(() => this.publicPlans().map(p => ({
+    name: p.name,
+    free: p.price === 0,
+    highlighted: p.highlighted,
+    price: money(p.price),
+    per: p.price === 0 ? '/forever' : PER[p.interval],
+    forWho: p.description,
+    yearly: p.yearlyPrice != null
+      ? `or ${money(p.yearlyPrice)} a year${p.monthsFree > 0 ? ` — ${p.monthsFree} month${p.monthsFree === 1 ? '' : 's'} free` : ''}`
+      : '',
+    features: features(p),
+  })));
+  protected readonly freePlan = computed(() => this.publicPlans().find(p => p.price === 0) ?? null);
+  /** Cheapest paid plan, as a monthly price. */
+  private readonly cheapest = computed(() =>
+    this.publicPlans().filter(p => p.price > 0).sort((a, b) => a.price / MONTHS[a.interval] - b.price / MONTHS[b.interval])[0] ?? null);
+  protected readonly pricePill = computed(() => {
+    const paid = this.cheapest();
+    if (!paid) return this.freePlan() ? 'Free for small classes' : '';
+    const from = `plans from ${money(paid.price)}${PER[paid.interval].replace('/', ' a ')}`;
+    return this.freePlan() ? `Free for small classes · paid ${from}` : from.charAt(0).toUpperCase() + from.slice(1);
+  });
+
   protected readonly includes = ['Fees & receipts', 'Faculty attendance & pay', 'Online admissions', 'Student & teacher portals', 'Tests & report cards', 'Expenses with bills', 'Excel reports', 'Activity alerts', 'Emails in your academy’s name'];
-  protected readonly faqs = [
-    ['Do I need to install anything?', 'No. Ojas runs in the browser on any phone, tablet or computer. Teachers and students simply sign in with your academy code.'],
-    ['Is it really free?', 'Yes. The Free plan has no time limit: up to 25 students, 2 faculty and 50 emailed receipts a month. It never runs out; you upgrade only if you need more.'],
-    ['What happens if I go over a limit?', 'Nothing is deleted. You keep everything you already have and simply cannot add more until you upgrade — from ₹199 a month, or ₹1,999 a year.'],
-    ['Can you bring in our existing data?', 'Yes. Share your student and fee lists in Excel and we will help you load them, so you start with your real numbers.'],
-    ['Is our data private?', 'Every academy has its own workspace and only sees its own records. Inside your academy, each role sees only what it needs.'],
-    ['Can teachers fake attendance?', 'Not easily. QR codes change every 20 seconds and expire within a minute. Location check-ins and manual entries wait for your approval.'],
-    ['Do students see our fee details?', 'No. The student portal shows subjects, teachers, test results and report cards. Payment receipts go to the student by email.'],
-  ];
+  protected readonly faqs = computed(() => {
+    const free = this.freePlan();
+    const paid = this.cheapest();
+    const yearly = paid?.yearlyPrice != null ? `, or ${money(paid.yearlyPrice)} a year` : '';
+    const list: string[][] = [
+      ['Do I need to install anything?', 'No. Ojas runs in the browser on any phone, tablet or computer. Teachers and students simply sign in with your academy code.'],
+    ];
+    if (free) {
+      const limits = [limit(free.maxStudents, 'student'), limit(free.maxFaculty, 'faculty', 'faculty'),
+        free.maxReceiptEmailsPerMonth == null ? 'unlimited emailed receipts' : `${free.maxReceiptEmailsPerMonth} emailed receipts a month`];
+      list.push(['Is it really free?', `Yes. The ${free.name} plan has no time limit: ${joinAnd(limits)}. It never runs out; you upgrade only if you need more.`]);
+    }
+    list.push(['What happens if I go over a limit?',
+      `Nothing is deleted. You keep everything you already have and simply cannot add more until you upgrade${paid ? ` — from ${money(paid.price)}${PER[paid.interval].replace('/', ' a ')}${yearly}` : ''}.`]);
+    return [...list, ...FIXED_FAQS];
+  });
 
   private raf = 0;
   private readonly cleanups: (() => void)[] = [];
@@ -668,6 +736,13 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
   }
 
   protected openTour(): void { this.tourOpen.set(true); }
+
+  constructor() {
+    this.api.get<PublicPlan[]>('public/plans').subscribe({
+      next: plans => this.publicPlans.set(plans),
+      error: () => this.plansFailed.set(true),
+    });
+  }
 
   ngAfterViewInit(): void {
     const root = this.host.nativeElement as HTMLElement;

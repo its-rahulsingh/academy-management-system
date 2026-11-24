@@ -107,6 +107,10 @@ public sealed class Plan : Entity
     /// <summary>The academy's own logo is shown and the "Powered by Ojas" credit is hidden.</summary>
     public bool CustomBranding { get; set; } = true;
     public bool IsActive { get; set; } = true;
+    /// <summary>Listed in the pricing section of the public website (when also active).</summary>
+    public bool ShowOnWebsite { get; set; } = true;
+    /// <summary>Marked "Most popular" on the website.</summary>
+    public bool Highlighted { get; set; }
 }
 
 /// <summary>Plan codes the product relies on: academies fall back to the free plan when a trial or paid period ends.</summary>

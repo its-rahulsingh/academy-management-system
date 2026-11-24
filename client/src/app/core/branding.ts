@@ -2,7 +2,8 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, effect, inject } from '@angular/core';
 import { AuthService } from './auth.service';
 
-const DEFAULT_TITLE = 'Ojas';
+/** The tab title when nobody from an academy is signed in (the website, sign-in, the owner console). */
+const DEFAULT_TITLE = 'Ojas — Powering how Bharat learns';
 
 /**
  * Puts the signed-in academy's logo on the browser tab and its name in the tab title.

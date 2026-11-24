@@ -377,8 +377,11 @@ public static class AuditDashboard
             }
         }
 
-        // ---- Staff working at night (portal logins clocking out late are normal) ----
-        foreach (var night in actions.Where(r => r.AfterHours && roleOf(r) is not (Roles.Faculty or Roles.Student))
+        // ---- Staff working at night. Only the academy's own staff: portal logins clocking out late are normal,
+        // the platform owner setting up an academy is not the academy at work, and changing one's own password or
+        // profile at night is not a risk. ----
+        foreach (var night in actions.Where(r => r.AfterHours && roleOf(r) is { } role && Roles.Tenant.Contains(role)
+                                                 && !(r.EntityType == nameof(AppUser) && r.EntityId == r.UserId?.ToString()))
                      .GroupBy(r => (User: r.UserId?.ToString() ?? r.UserName, Night: DateOnly.FromDateTime(r.Local.Hour < NightTo ? r.Local.AddDays(-1) : r.Local))))
         {
             var list = night.OrderBy(r => r.At).ToList();
