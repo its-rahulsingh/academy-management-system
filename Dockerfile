@@ -20,6 +20,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=api-build /app/publish/ ./
 COPY --from=frontend-build /source/client/dist/academy-web/browser/ ./wwwroot/
+# Marketing videos, served at /media (see Startup.MarketingFolder).
+COPY marketing/web/ ./marketing/
 
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV ASPNETCORE_URLS=http://0.0.0.0:10000

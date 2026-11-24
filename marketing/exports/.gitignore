@@ -1,0 +1,3 @@
+# Finished videos are large; keep them out of git.
+*
+!.gitignore

@@ -1,0 +1,292 @@
+<title>Ojas TV Ad Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a film call sheet. A sticky slate on top, then the shoot in order: setup, cast, shots, edit. */
+:root {
+  --bg: #f6f5fb; --surface: #ffffff; --ink: #1d1b33; --muted: #625f80; --line: #e3e1ef;
+  --accent: #5147df; --accent-soft: #ecebfd; --warm: #b7600a; --warm-soft: #fff1dc;
+  --ok: #157a52; --ok-soft: #e1f4ec; --code: #f2f1f9;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12111f; --surface: #1b1a2d; --ink: #eeedfa; --muted: #a3a0c4; --line: #2e2c47;
+  --accent: #9c92ff; --accent-soft: #29264d; --warm: #ffb547; --warm-soft: #3a2c16;
+  --ok: #6ee7b7; --ok-soft: #163a2d; --code: #23213a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #12111f; --surface: #1b1a2d; --ink: #eeedfa; --muted: #a3a0c4; --line: #2e2c47;
+  --accent: #9c92ff; --accent-soft: #29264d; --warm: #ffb547; --warm-soft: #3a2c16;
+  --ok: #6ee7b7; --ok-soft: #163a2d; --code: #23213a; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -.02em; }
+h2 { font-size: clamp(22px, 3vw, 28px); font-weight: 800; letter-spacing: -.01em; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.label { font: 600 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* sticky slate */
+.slate { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.slate-in { max-width: 980px; margin: 0 auto; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.slate b { font-family: var(--display); font-size: 16px; }
+.slate nav { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
+.slate a { color: var(--muted); text-decoration: none; } .slate a:hover, .slate a:focus-visible { color: var(--accent); }
+.progress { margin-left: auto; display: flex; align-items: center; gap: 10px; font: 600 12px var(--mono); color: var(--muted); }
+.bar { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s; }
+
+header.intro { padding-block: 40px 8px; display: grid; gap: 14px; }
+.intro p { max-width: 62ch; font-size: 18px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 600 12px var(--mono); padding: 6px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+
+section { padding-top: 44px; display: grid; gap: 16px; scroll-margin-top: 70px; }
+.lead { max-width: 65ch; }
+
+/* steps */
+.steps { display: grid; gap: 10px; counter-reset: step; }
+.step { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.step::before { counter-increment: step; content: counter(step); font: 600 14px var(--mono); width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.step div { min-width: 0; }
+
+/* timeline */
+.timeline { overflow-x: auto; }
+.tl { display: flex; min-width: 680px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.tl span { padding: 10px 8px; font: 600 12px/1.3 var(--mono); border-right: 1px solid var(--surface); }
+.tl .ai { background: var(--accent-soft); color: var(--accent); }
+.tl .ui { background: var(--warm-soft); color: var(--warm); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 14px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+/* cards */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.card.done { border-color: var(--ok); }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.card-head .meta { font: 600 12px var(--mono); color: var(--muted); }
+.tag { font: 600 11px var(--mono); padding: 4px 8px; border-radius: 5px; }
+.tag.ai { background: var(--accent-soft); color: var(--accent); }
+.tag.ui { background: var(--warm-soft); color: var(--warm); }
+.check { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--ok); }
+.cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.line { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; }
+.line q { font-family: var(--display); font-size: 18px; quotes: "“" "”"; }
+.line small { display: block; color: var(--muted); font-size: 14px; }
+
+.prompt { display: grid; gap: 6px; }
+.prompt-top { display: flex; align-items: center; gap: 10px; }
+pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font: 13px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+button.copy { margin-left: auto; font: 600 13px var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--accent); border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+button.copy:hover { background: var(--accent-soft); }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { font-size: 14px; color: var(--muted); }
+.note b { color: var(--ink); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+ul.tight { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.callout { background: var(--warm-soft); border-radius: 10px; padding: 14px 16px; font-size: 15px; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+@media (max-width: 640px) { .progress { margin-left: 0; } .slate nav { display: none; } }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="slate"><div class="slate-in">
+  <b>Ojas TV Ad</b>
+  <nav aria-label="Sections">
+    <a href="#workflow">Workflow</a><a href="#story">Story</a><a href="#cast">Cast</a><a href="#shots">Shots</a><a href="#edit">Edit</a>
+  </nav>
+  <div class="progress" aria-live="polite"><span id="progress-text">0 / 0 done</span><div class="bar"><i id="progress-bar"></i></div></div>
+</div></div>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="label">Production kit · Gemini (Veo) + your product video</span>
+    <h1>“Meera Ma’am’s evening” — a 60-second Ojas ad</h1>
+    <p class="muted">A home tuition teacher drowning in fee registers finds Ojas. Six short AI scenes with real actors’ feel, cut together with real Ojas screens from your product tour. Each piece below is one message to Gemini.</p>
+    <div class="facts"><span class="chip">60 s master · 30 s cut-down</span><span class="chip">16:9 + 9:16</span><span class="chip">Hinglish dialogue</span><span class="chip">6 AI shots · 3 product inserts</span></div>
+  </header>
+
+  <section id="workflow">
+    <h2>How to feed Gemini, piece by piece</h2>
+    <p class="lead">Gemini’s video model makes one clip of about 8 seconds per request and remembers nothing between clips. So every prompt here is complete on its own, and the people are described the same way every time. Do one card per message.</p>
+    <div class="steps">
+      <div class="step"><div><b>Cast first.</b> Generate each character’s reference photo with Gemini’s image tool (Cast section). Pick the best one of each and save it. These photos keep faces the same across scenes.</div></div>
+      <div class="step"><div><b>Make each shot’s first frame.</b> For every shot, send the <i>Frame</i> prompt with that character’s reference photo attached. Keep the image that matches best.</div></div>
+      <div class="step"><div><b>Animate it.</b> Start a video request, attach that first-frame image, and send the shot’s <i>Video</i> prompt. It adds movement, voice and sound. Generate 2–3 takes and keep the best.</div></div>
+      <div class="step"><div><b>Tick it off here.</b> Video generations are limited per day on Gemini plans, so spread the shoot over a few days. Ticks are saved in this browser.</div></div>
+      <div class="step"><div><b>Edit.</b> Drop the clips and the three Ojas screen inserts into CapCut or Canva in the order on the timeline, then add music, subtitles and the end card (Edit section).</div></div>
+    </div>
+    <p class="callout"><b>Do not ask Gemini to draw the Ojas app.</b> AI video garbles screens and text. Every prompt keeps phone and laptop screens facing away. The real app comes from your own product tour video, cut in between scenes.</p>
+  </section>
+
+  <section id="story">
+    <h2>Story and timeline</h2>
+    <p class="lead">Problem, discovery, three proofs (fees, parent, attendance), relief, logo. The 30-second cut keeps the shots marked ★.</p>
+    <div class="timeline"><div class="tl" role="list">
+      <span class="ai" role="listitem" style="flex:8">1 ★ Register mess · 8s</span>
+      <span class="ai" role="listitem" style="flex:8">2 Parent asks · 8s</span>
+      <span class="ai" role="listitem" style="flex:8">3 ★ Finds Ojas · 8s</span>
+      <span class="ui" role="listitem" style="flex:5">A ★ Fees · 5s</span>
+      <span class="ai" role="listitem" style="flex:6">4 Parent smiles · 6s</span>
+      <span class="ai" role="listitem" style="flex:8">5 ★ QR attendance · 8s</span>
+      <span class="ui" role="listitem" style="flex:4">B QR · 4s</span>
+      <span class="ai" role="listitem" style="flex:8">6 ★ Chai & calm · 8s</span>
+      <span class="ui" role="listitem" style="flex:5">C ★ End card · 5s</span>
+    </div></div>
+    <div class="legend"><span><i style="background:var(--accent-soft)"></i>AI scene from Gemini</span><span><i style="background:var(--warm-soft)"></i>Real Ojas footage from your tour or reel</span></div>
+  </section>
+
+  <section id="cast">
+    <h2>Cast</h2>
+    <p class="lead">Generate these as still photos first. Paste the description exactly; the same words appear inside every shot prompt, which is what keeps people consistent.</p>
+    <div class="cast" id="cast-list"></div>
+  </section>
+
+  <section id="shots">
+    <h2>Shots</h2>
+    <p class="lead">Each AI shot has two prompts: the <b>Frame</b> (a still image to start from) and the <b>Video</b> (motion, voice, sound). Attach the cast photo when making the frame, and the frame when making the video.</p>
+    <div id="shot-list" class="steps" style="counter-reset:none"></div>
+  </section>
+
+  <section id="edit">
+    <h2>Edit and finish</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>Cut in CapCut or Canva</h3>
+        <ul class="tight">
+          <li>Lay out clips in timeline order. Trim each AI clip to the line plus half a second.</li>
+          <li>Inserts A–B: record your product tour and cut the timestamps listed on each insert card.</li>
+          <li>Add subtitles for every line (most people watch muted), in English or Hindi.</li>
+          <li>Music: a light, hopeful track from CapCut’s commercial-use library or the YouTube Audio Library, at about 15% volume under speech.</li>
+          <li>Export 16:9 for YouTube and WhatsApp, and 9:16 for Reels.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>If something comes out wrong</h3>
+        <ul class="tight">
+          <li><b>Face changed between shots:</b> remake that shot’s frame with the cast photo attached, then animate again.</li>
+          <li><b>“Ojas” said wrongly:</b> keep the clip, mute it, and record that line yourself or with a voice tool over the top.</li>
+          <li><b>Hindi sounds off:</b> regenerate once; if it is still off, use the English line given under each Hindi line.</li>
+          <li><b>Garbled text or screens appear:</b> add “no visible text anywhere” and regenerate.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Before you post</h3>
+        <ul class="tight">
+          <li>Add a small “Characters created with AI” line in the end card or caption. It keeps the ad honest with viewers.</li>
+          <li>Make sure no character looks like a real celebrity or a real person you know.</li>
+          <li>Claims must match the product: free up to 25 students, paid plans from ₹199.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const STYLE = 'Photorealistic, cinematic 35mm commercial look, natural warm lighting, shallow depth of field, main subject centred in frame (safe for a vertical crop). Indian setting. No visible text anywhere: no subtitles, captions, logos or readable phone, tablet or laptop screens.';
+const ROOM = 'a small, tidy home tuition room in an Indian city: whitewashed walls, a whiteboard with handwritten physics formulas, a wooden study table with a few students’ notebooks, a steel almirah, a potted money plant, warm afternoon light through a window with an iron grille';
+
+const CAST = [
+  { id: 'meera', name: 'Meera (lead)', role: 'Runs a small tuition class from home. Tired at the start, relaxed at the end.',
+    desc: 'Meera, an Indian woman in her mid-30s, medium-brown skin, black hair in a neat low bun, a small black bindi, thin rectangular black glasses, wearing a mustard-yellow cotton kurta with a plain off-white dupatta and small gold stud earrings. Warm, expressive face.' },
+  { id: 'sharma', name: 'Mr. Sharma (parent)', role: 'A polite father of one of Meera’s students.',
+    desc: 'Mr. Sharma, an Indian father in his late 40s, short salt-and-pepper hair, a neatly trimmed grey beard, wearing a light-blue formal shirt with sleeves rolled once, a steel wristwatch.' },
+  { id: 'rahul', name: 'Rahul Sir (teacher)', role: 'A part-time physics teacher who comes in for evening batches.',
+    desc: 'Rahul, a young Indian physics teacher in his late 20s, slim, short wavy black hair, light stubble, wearing a navy-blue polo shirt with a brown canvas shoulder bag.' },
+];
+const who = id => CAST.find(c => c.id === id).desc;
+
+const SHOTS = [
+  { id: 's1', kind: 'ai', title: 'Shot 1 · The register mess', len: '8 s', cut: true,
+    line: 'Kisne fees di, kisne nahi… har mahine yahi register ka jhanjhat!', en: 'Who paid, who didn’t… the same register mess every month!',
+    frame: () => `Medium shot of ${who('meera')} She sits at the wooden table in ${ROOM}. The table is piled with thick paper fee registers and a receipt book, a phone lying face down beside them. She holds her forehead with one hand, looking stressed. ${STYLE}`,
+    video: () => `Animate this scene. Meera flips quickly through a thick paper register, stops, sighs and looks up toward camera, frustrated but likeable. The phone beside her buzzes twice. She says in natural Hinglish with an Indian accent: "Kisne fees di, kisne nahi… har mahine yahi register ka jhanjhat!" Slow push-in toward her face. Sounds: pages flipping, phone vibration, faint street noise outside. ${STYLE}` },
+  { id: 's2', kind: 'ai', title: 'Shot 2 · A parent at the door', len: '8 s',
+    line: 'Ma’am, pichhle mahine ki fees maine de di thi… receipt mil sakti hai?', en: 'Ma’am, I paid last month’s fee… could I get the receipt?',
+    frame: () => `Over-the-shoulder shot from behind Meera toward the open wooden door of ${ROOM}. Standing politely in the doorway is ${who('sharma')} In the foreground, slightly out of focus, ${who('meera')} sits at the table with paper registers. ${STYLE}`,
+    video: () => `Animate this scene. Mr. Sharma smiles politely and says in natural Hinglish with an Indian accent: "Ma'am, pichhle mahine ki fees maine de di thi… receipt mil sakti hai?" Meera nods quickly and starts flipping through the register, flustered. Static camera. Sounds: soft room ambience, pages flipping. ${STYLE}` },
+  { id: 's3', kind: 'ai', title: 'Shot 3 · She finds Ojas', len: '8 s', cut: true,
+    line: 'Ojas… aur chhoti classes ke liye bilkul free? Chalo, try karte hain!', en: 'Ojas… and completely free for small classes? Let’s try it!',
+    frame: () => `Close-up of ${who('meera')} She sits at the table in ${ROOM}, holding her phone up with the screen facing away from camera, reading it with raised eyebrows. ${STYLE}`,
+    video: () => `Animate this scene. Meera reads her phone (screen facing away from camera), her face changes from curious to a delighted smile, and she says in natural Hinglish with an Indian accent: "Ojas… aur chhoti classes ke liye bilkul free? Chalo, try karte hain!" Pronounce Ojas as "OH-jus". Gentle handheld camera. Sounds: a soft notification chime, light room ambience. ${STYLE}` },
+  { id: 'iA', kind: 'ui', title: 'Insert A · Fee recorded, receipt emailed', len: '5 s', cut: true,
+    src: 'Product tour (ojas-demo.html), Fees chapter, about 0:41–0:47: the payment is recorded and the “Receipt emailed to the student” card appears.' },
+  { id: 's4', kind: 'ai', title: 'Shot 4 · The parent gets the receipt', len: '6 s',
+    line: 'Arre wah, receipt turant email pe aa gayi!', en: 'Oh wow, the receipt came to my email instantly!',
+    frame: () => `Medium shot of ${who('sharma')} He sits on a sofa in a simple Indian living room in the evening, holding his phone with the screen facing away from camera. ${STYLE}`,
+    video: () => `Animate this scene. Mr. Sharma's phone chimes, he glances at it, smiles warmly and says in natural Hinglish with an Indian accent: "Arre wah, receipt turant email pe aa gayi!" He nods to himself, impressed. Static camera. Sounds: a soft email chime, a TV murmuring far in the background. ${STYLE}` },
+  { id: 's5', kind: 'ai', title: 'Shot 5 · Attendance with a QR scan', len: '8 s', cut: true,
+    line: 'Bas scan kiya, attendance lag gayi. Na register, na bahas!', en: 'Just one scan and attendance is marked. No register, no arguments!',
+    frame: () => `Medium shot of ${who('rahul')} He has just walked into ${ROOM} and holds his phone up toward a small tablet mounted on the wall beside the whiteboard; both screens face away from camera. ${STYLE}`,
+    video: () => `Animate this scene. Rahul holds his phone up to the wall tablet for a second, a soft beep sounds, he lowers the phone, turns to camera with a confident grin and says in natural Hinglish with an Indian accent: "Bas scan kiya, attendance lag gayi. Na register, na bahas!" Slow sideways camera move. Sounds: the beep, footsteps, students chatting softly off-screen. ${STYLE}` },
+  { id: 'iB', kind: 'ui', title: 'Insert B · The changing QR code', len: '4 s',
+    src: 'Product tour, Faculty portal chapter, about 0:58–1:02: the QR code with “New code in …s” and the teacher’s phone clocking in.' },
+  { id: 's6', kind: 'ai', title: 'Shot 6 · Chai and a calm evening', len: '8 s', cut: true,
+    line: 'Fees, attendance, admissions… sab ek hi app mein. Ab meri shaam, meri apni.', en: 'Fees, attendance, admissions… all in one app. Now my evenings are my own.',
+    frame: () => `Medium shot of ${who('meera')} It is evening in ${ROOM}; the registers are gone and the table is tidy. A laptop sits open with its screen facing away from camera, and she holds a glass of masala chai. Warm golden lamp light. ${STYLE}`,
+    video: () => `Animate this scene. Meera takes a relaxed sip of chai, closes the laptop halfway, looks at camera with a calm, happy smile and says in natural Hinglish with an Indian accent: "Fees, attendance, admissions… sab ek hi app mein. Ab meri shaam, meri apni." Slow pull-back. Sounds: a soft evening ambience, birds outside, a gentle cup clink. ${STYLE}` },
+  { id: 'iC', kind: 'ui', title: 'End card · Ojas logo and offer', len: '5 s', cut: true,
+    src: 'Use the last 5 seconds of your reel (ojas-ad.html) for 9:16, or the closing “₹0 / month” screen of the tour for 16:9. Voice-over: “Ojas. Aapki poori academy, ek app mein. Pachchis students tak bilkul free.” Add: “Characters created with AI” in small text.' },
+];
+
+// ---- render ----
+const $ = s => document.querySelector(s);
+function copyBlock(label, text, id) {
+  return `<div class="prompt"><div class="prompt-top"><span class="label">${label}</span><button type="button" class="copy" data-copy="${id}">Copy</button></div><pre id="${id}">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre></div>`;
+}
+function checkbox(id) { return `<label class="check"><input type="checkbox" id="done-${id}" data-done="${id}"> Done</label>`; }
+
+$('#cast-list').innerHTML = CAST.map(c => `
+  <article class="card" data-card="${c.id}">
+    <div class="card-head"><h3>${c.name}</h3>${checkbox(c.id)}</div>
+    <p class="note">${c.role}</p>
+    ${copyBlock('Reference photo prompt (Gemini image)', `Portrait photo, chest-up, facing camera with a natural expression, plain softly lit background. ${c.desc} ${STYLE}`, 'p-' + c.id)}
+  </article>`).join('');
+
+$('#shot-list').innerHTML = SHOTS.map(s => s.kind === 'ai' ? `
+  <article class="card" data-card="${s.id}">
+    <div class="card-head"><span class="tag ai">AI scene</span><h3>${s.title}</h3><span class="meta">${s.len}${s.cut ? ' · in 30 s cut' : ''}</span>${checkbox(s.id)}</div>
+    <div class="line"><q>${s.line}</q><small>${s.en}</small></div>
+    ${copyBlock('1 · Frame prompt (image, attach cast photo)', s.frame(), 'f-' + s.id)}
+    ${copyBlock('2 · Video prompt (attach the frame)', s.video(), 'v-' + s.id)}
+  </article>` : `
+  <article class="card" data-card="${s.id}">
+    <div class="card-head"><span class="tag ui">Ojas footage</span><h3>${s.title}</h3><span class="meta">${s.len}${s.cut ? ' · in 30 s cut' : ''}</span>${checkbox(s.id)}</div>
+    <p>${s.src}</p>
+  </article>`).join('');
+
+// ---- copy ----
+const toast = $('#toast'); let toastTimer;
+function say(msg) { toast.textContent = msg; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.hidden = true, 1600); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-copy]'); if (!b) return;
+  const pre = document.getElementById(b.dataset.copy);
+  const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  try {
+    navigator.clipboard.writeText(pre.textContent).then(() => { b.textContent = 'Copied'; say('Prompt copied'); setTimeout(() => b.textContent = 'Copy', 1500); },
+      () => { select(); say('Selected: press Ctrl+C to copy'); });
+  } catch { select(); say('Selected: press Ctrl+C to copy'); }
+});
+
+// ---- progress (kept in this browser only) ----
+const KEY = 'ojas-ad-kit-done';
+let done = {}; try { done = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+const boxes = [...document.querySelectorAll('input[data-done]')];
+function paint() {
+  boxes.forEach(b => { b.checked = !!done[b.dataset.done]; b.closest('.card').classList.toggle('done', b.checked); });
+  const n = boxes.filter(b => b.checked).length;
+  $('#progress-text').textContent = `${n} / ${boxes.length} done`;
+  $('#progress-bar').style.width = (100 * n / boxes.length) + '%';
+}
+boxes.forEach(b => b.addEventListener('change', () => { done[b.dataset.done] = b.checked; try { localStorage.setItem(KEY, JSON.stringify(done)); } catch {} paint(); }));
+paint();
+</script>

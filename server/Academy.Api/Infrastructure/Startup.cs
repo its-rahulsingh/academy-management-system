@@ -136,6 +136,14 @@ public static class Startup
 
         app.UseDefaultFiles();
         app.UseStaticFiles();
+        // The marketing videos live in the repository's marketing/web folder and are served at /media
+        // (the landing page frames them). In the container they are copied next to the app.
+        if (MarketingFolder(app.Environment.ContentRootPath) is { } marketing)
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(marketing),
+                RequestPath = "/media"
+            });
         app.UseRouting();
         app.UseRateLimiter();
         app.UseAuthentication();
@@ -144,6 +152,11 @@ public static class Startup
         app.UseAuthorization();
         app.UseMiddleware<CsrfMiddleware>();
     }
+
+    /// <summary>marketing/web: copied beside the app in the container, or found at the repository root when running from source.</summary>
+    private static string? MarketingFolder(string contentRoot) =>
+        new[] { Path.Combine(contentRoot, "marketing"), Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "marketing", "web")) }
+            .FirstOrDefault(Directory.Exists);
 
     public static void MapAcademyEndpoints(this WebApplication app)
     {

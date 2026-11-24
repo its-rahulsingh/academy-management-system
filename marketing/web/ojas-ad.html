@@ -40,6 +40,12 @@
     <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
     <p id="time">0.0s</p>
     <div class="row"><button id="record" class="primary">● Record &amp; download video</button></div>
+    <p><b>Clips for the TV ad</b> (9:16, to cut between your Gemini scenes)</p>
+    <div class="row">
+      <button data-clip="insert-a">Insert A · Fees (5 s)</button>
+      <button data-clip="insert-b">Insert B · QR (4 s)</button>
+      <button data-clip="end-card">End card (5 s)</button>
+    </div>
     <div id="status"></div>
     <p>Recording plays the ad once in real time (about 30 s). Keep this tab visible until it downloads.</p>
   </div>
@@ -52,8 +58,11 @@ const CONFIG = {
   offerBig: 'FREE',
   offerSmall: 'Up to 25 students free. Bigger plans from just ₹199 a month.',
   contact: 'DM “DEMO” to get started',
+  tvContact: 'WhatsApp +91 85548 23947',   // on the TV-ad end card
 };
 // ------------------------------------------------------------------------------------------
+/** Set while exporting the TV-ad end card, which adds a note that the ad's characters were made with AI. */
+let AI_NOTE = false;
 
 const W = 1080, H = 1920, FPS = 30;
 const C = { brand: '#5147df', brand2: '#6a5cf2', deep: '#16153a', deep2: '#2c2a5a', ink: '#1e2438', muted: '#7d8299',
@@ -371,9 +380,11 @@ function sCta(lt) {
     const s = 1 + 0.03 * Math.sin(lt * 6);
     ctx.save(); ctx.translate(540, 1420); ctx.scale(s, s); ctx.translate(-540, -1420);
     shadow(40, '#0b0d2a55', 16); rr(130, 1370, 820, 110, 55, '#fff'); noShadow();
-    text(CONFIG.contact, 540, 1400, { size: 42, weight: 800, color: C.brand, align: 'center' });
+    text(AI_NOTE ? CONFIG.tvContact : CONFIG.contact, 540, 1400, { size: 42, weight: 800, color: C.brand, align: 'center' });
     ctx.restore();
   });
+  // Only on the TV-ad end card: the ad's characters were made with AI.
+  if (AI_NOTE) enter(lt, 1.9, () => text('Characters in this ad were created with AI', W / 2, 1520, { size: 26, weight: 600, color: '#c9c4ff', align: 'center' }));
 }
 
 const SCENES = [[sHook, 3.4], [sBrand, 2.8], [sFees, 4.4], [sAttendance, 4.4], [sAdmissions, 4.2], [sPortal, 3.6], [sControl, 3.8], [sCta, 4.4]];
@@ -415,29 +426,58 @@ playBtn.onclick = () => playing ? pause() : play();
 restartBtn.onclick = () => { cur = 0; play(0); };
 scrub.oninput = () => { pause(); cur = scrub.value / 1000 * TOTAL; draw(cur); show(); };
 
-recBtn.onclick = () => {
+// Records the part of the ad from `from` to `to` seconds, then holds the last frame for `hold` seconds, and downloads it.
+let recording = false;
+function recordRange(from, to, hold, file, done) {
   const types = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   const type = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
   if (!type) { statusEl.textContent = 'This browser cannot record video. Use a recent Chrome or Edge.'; return; }
-  const stream = canvas.captureStream(FPS);
-  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 16_000_000 });
+  if (recording) return;
+  recording = true;
+  const controls = [...document.querySelectorAll('button, input')];
+  controls.forEach(b => b.disabled = true);
+  const rec = new MediaRecorder(canvas.captureStream(FPS), { mimeType: type, videoBitsPerSecond: 16_000_000 });
   const chunks = [];
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
   rec.onstop = () => {
     const ext = type.includes('mp4') ? 'mp4' : 'webm';
     const blob = new Blob(chunks, { type: type.split(';')[0] });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `ojas-instagram-ad.${ext}`; a.click();
-    statusEl.textContent = `Saved ojas-instagram-ad.${ext} (${(blob.size / 1e6).toFixed(1)} MB).` + (ext === 'webm' ? ' This browser made WebM; convert to MP4 before posting.' : '');
-    [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = false);
+    a.href = URL.createObjectURL(blob); a.download = `${file}.${ext}`; a.click();
+    statusEl.textContent = `Saved ${file}.${ext} (${(blob.size / 1e6).toFixed(1)} MB).` + (ext === 'webm' ? ' This browser made WebM; convert to MP4 before posting.' : '');
+    window.lastRecording = blob;
+    controls.forEach(b => b.disabled = false);
+    recording = false; AI_NOTE = false;
+    if (done) done(blob);
   };
-  [playBtn, restartBtn, recBtn, scrub].forEach(b => b.disabled = true);
-  statusEl.textContent = 'Recording… keep this tab visible.';
-  draw(0);
+  statusEl.textContent = `Recording ${file}… keep this tab visible.`;
+  pause();
+  draw(from);
   rec.start(250);
-  onEnd = () => setTimeout(() => rec.stop(), 400);
-  cur = 0; play(0);
+  const startAt = performance.now();
+  const total = (to - from) + hold;
+  const tick = () => {
+    const t = (performance.now() - startAt) / 1000;
+    if (t >= total) { setTimeout(() => rec.stop(), 150); return; }
+    draw(Math.min(from + t, to));   // after `to`, keeps redrawing the last frame so the hold is recorded
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+recBtn.onclick = () => recordRange(0, TOTAL - 0.001, 0, 'ojas-instagram-ad');
+
+// Pieces of the reel for the Gemini TV ad (9:16), cut where each scene's own animation starts.
+const CLIPS = {
+  'insert-a': { from: STARTS[2] + FADE, to: STARTS[3] - 0.01, hold: 1.0, file: 'ojas-insert-a-fees' },
+  'insert-b': { from: STARTS[3] + FADE, to: STARTS[4] - 0.01, hold: 0.0, file: 'ojas-insert-b-qr' },
+  'end-card': { from: STARTS[7] + FADE, to: TOTAL - 0.001, hold: 1.0, file: 'ojas-end-card', aiNote: true },
 };
+document.querySelectorAll('button[data-clip]').forEach(b => b.onclick = () => {
+  const c = CLIPS[b.dataset.clip];
+  AI_NOTE = !!c.aiNote;
+  recordRange(c.from, c.to, c.hold, c.file);
+});
 
 Promise.all([800, 700, 600].map(w => document.fonts.load(`${w} 40px Manrope`))).catch(() => {}).then(() => { draw(0); show(); if (EMBED) play(0); });
 draw(0);

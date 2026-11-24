@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -188,6 +188,9 @@ public sealed class AuthAndAccessTests(AppFactory factory)
         var video = await browser.GetAsync("/media/ojas-demo.html?embed=1");
         var api = await browser.GetAsync("/api/health");
 
+        // The page itself comes from the repository's marketing/web folder.
+        Assert.Equal(HttpStatusCode.OK, video.StatusCode);
+        Assert.Contains("Ojas Product Tour", await video.Content.ReadAsStringAsync());
         Assert.Equal("SAMEORIGIN", video.Headers.GetValues("X-Frame-Options").Single());
         Assert.Equal("DENY", api.Headers.GetValues("X-Frame-Options").Single());
     }
