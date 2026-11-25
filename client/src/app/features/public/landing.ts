@@ -75,7 +75,7 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
           @if (pricePill()) {
             <span class="lp-pill rv in"><i></i> {{ pricePill() }}</span>
           }
-          <p class="lp-tag rv in">Powering how Bharat learns</p>
+          <p class="lp-tag rv in">Empower Learning</p>
           <h1 class="rv">The radiant way to <br class="br-d" /><span class="grad">run your academy.</span></h1>
           <p class="rv">
             Fees, faculty attendance, admissions, student portals and reports — one beautifully simple app,
@@ -360,7 +360,7 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
 
       <footer class="foot">
         <div class="brand"><img src="ojas-logo.svg" alt="" /><span>Ojas</span></div>
-        <p class="foot-tag">Powering how Bharat learns.</p>
+        <p class="foot-tag">Empower Learning.</p>
         <p>Ojas — Sanskrit for vitality and radiance.</p>
         <p class="foot-contact"><a [href]="contact.tel">{{ contact.phone }}</a> · <a [href]="'mailto:' + contact.email">{{ contact.email }}</a></p>
         <small>© {{ year }} Ojas · Figures in previews are illustrative.</small>
@@ -618,7 +618,8 @@ const CONTACT_URL = whatsappLink('Hi, I would like to start using Ojas for my ac
       .float { display: none; }
     }
     @media (max-width: 680px) {
-      .ghost { display: none; } .nav-cta .btn { padding: 10px 14px; font-size: 13px; }
+      .nav { gap: 8px; } .nav-cta { gap: 4px; } .ghost { padding: 10px 8px; font-size: 13px; color: #fff; } .nav-cta .btn { padding: 10px 14px; font-size: 13px; }
+      .lp-tag { letter-spacing: .18em; }
       .hero { padding-top: 120px; min-height: 0; }
       .orb { opacity: .4; } .br-d { display: none; }
       .dash-body { grid-template-columns: 1fr; } aside { display: none; } .dstats { grid-template-columns: 1fr 1fr; } .dash-row { grid-template-columns: 1fr; } .live { display: none; }
